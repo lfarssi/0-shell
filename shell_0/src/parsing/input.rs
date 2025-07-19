@@ -1,6 +1,6 @@
 use std::io;
 
-use crate::parsing::valide::validate_input;
+use crate::parsing::{command::handle_command, valide::{command_name, validate_input}};
 
 pub fn reading_input() -> String {
     let mut input = String::new();
@@ -10,10 +10,11 @@ pub fn reading_input() -> String {
     }
     let trimmed = input.trim();
     
-    if validate_input(trimmed.to_string()) {
-        // trimmed.to_string()
-        "VAlid Command".to_string()
-    } else {
-        "Command '<name>' not found".to_string()
+    match validate_input(trimmed) {
+       Some(cmd) => handle_command(&cmd, trimmed), 
+        None => {
+            let cmd = command_name(trimmed);
+            format!("Command '{}' not found", cmd)
+        }
     }
 }
