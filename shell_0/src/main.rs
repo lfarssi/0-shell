@@ -1,4 +1,5 @@
 mod parsing;
+mod commands;
 fn main() {
    parsing::welcome::welcome();
 loop {
