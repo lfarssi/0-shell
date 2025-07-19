@@ -1,8 +1,9 @@
+use crate::commands::echo::echo;
+
 pub fn handle_command(command: &str, input: &str) -> String {
     match command {
         "echo" => {
-            let args = input.split_whitespace().skip(1).collect::<Vec<_>>().join(" ");
-            args
+            echo(input)
         }
         "pwd" => {
             std::env::current_dir()
