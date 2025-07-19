@@ -1,4 +1,4 @@
-use crate::commands::echo::echo;
+use crate::commands::{echo::echo, pwd::pwd};
 
 pub fn handle_command(command: &str, input: &str) -> String {
     match command {
@@ -6,9 +6,7 @@ pub fn handle_command(command: &str, input: &str) -> String {
             echo(input)
         }
         "pwd" => {
-            std::env::current_dir()
-                .map(|path| path.display().to_string())
-                .unwrap_or_else(|_| "Failed to get current directory".to_string())
+           pwd()
         }
         "exit" => {
             std::process::exit(0);
