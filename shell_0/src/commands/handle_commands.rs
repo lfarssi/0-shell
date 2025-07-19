@@ -1,16 +1,15 @@
+use crate::commands::{echo::echo, exit::exit, pwd::pwd};
+
 pub fn handle_command(command: &str, input: &str) -> String {
     match command {
         "echo" => {
-            let args = input.split_whitespace().skip(1).collect::<Vec<_>>().join(" ");
-            args
+            echo(input)
         }
         "pwd" => {
-            std::env::current_dir()
-                .map(|path| path.display().to_string())
-                .unwrap_or_else(|_| "Failed to get current directory".to_string())
+           pwd()
         }
         "exit" => {
-            std::process::exit(0);
+           exit()
         }
         _ => format!("Handler for '{}' not implemented", command),
     }
