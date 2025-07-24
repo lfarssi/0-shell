@@ -11,14 +11,19 @@ pub fn reading_input() -> String {
 
     
     let trimmed = input.trim();
-    // loop{
-    //     println!("dquote >")
-    // }
-    match validate_input(trimmed) {
+    if trimmed.len()==0{
+        "".to_string()
+    }else{
+         match validate_input(trimmed) {
        Some(cmd) => handle_command(&cmd, trimmed), 
         None => {
             let cmd = command_name(trimmed);
             format!("Command '{}' not found", cmd)
         }
     }
+    }
+    // loop{
+    //     println!("dquote >")
+    // }
+   
 }

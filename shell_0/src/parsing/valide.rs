@@ -1,6 +1,5 @@
 pub fn validate_input(input: &str) -> Option<String> {
     let command = command_name(input);
-
     let valid = match command {
         "echo" | r#""echo""# | "cd" | "pwd" | "cat" | "cp" | "mv" | "mkdir" | "exit" => true,
         "ls" => {
@@ -23,5 +22,6 @@ pub fn validate_input(input: &str) -> Option<String> {
 
 
 pub fn command_name(s: &str) -> &str {
-    s.split_whitespace().next().expect("Failure")
+
+     s.split_whitespace().next().unwrap_or("")
 }
