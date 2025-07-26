@@ -1,4 +1,6 @@
-pub fn welcome() {
+use std::{io::{self, Write}};
+
+pub fn welcome()->Result<usize, io::Error>{
     let orange = "\x1b[38;5;208m";
     let reset = "\x1b[0m";
     let message = r#"
@@ -14,6 +16,7 @@ pub fn welcome() {
 
                         welcome to our shell
     "#;
-    println!("{orange}{message}{reset}");
+    
+    io::stdout().write(format!("{orange}{message}{reset}\n").as_bytes())
 
 }
