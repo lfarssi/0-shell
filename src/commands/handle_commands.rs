@@ -1,4 +1,4 @@
-use crate::commands::{echo::echo, exit::exit, pwd::pwd,mkdir::mkdir};
+use crate::commands::{echo::echo, exit::exit, pwd::pwd,mkdir::mkdir,clear::clear};
 
 pub fn handle_command(command: &str, input: &str) -> String {
     match command {
@@ -6,6 +6,7 @@ pub fn handle_command(command: &str, input: &str) -> String {
         "pwd" => pwd(),
         "exit" => exit(),
          "mkdir" => mkdir(input),
+          "clear" => clear(),
         _ => format!("Handler for '{}' not implemented", command),
     }
 }

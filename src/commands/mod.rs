@@ -3,4 +3,4 @@ pub mod echo;
 pub mod pwd;
 pub mod exit;
 pub mod mkdir;
-
+pub mod clear;

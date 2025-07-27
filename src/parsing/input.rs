@@ -3,6 +3,7 @@ use std::io;
 use crate::{commands::handle_commands::handle_command, parsing::valide::{command_name, validate_input}};
 
 pub fn reading_input() -> String {
+    
     let mut input = String::new();
     eprint!("$ ");
 
