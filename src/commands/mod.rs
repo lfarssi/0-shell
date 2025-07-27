@@ -5,3 +5,4 @@ pub mod exit;
 pub mod mkdir;
 pub mod clear;
 pub mod cp;
+pub mod cat;
