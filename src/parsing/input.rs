@@ -6,7 +6,6 @@ pub fn reading_input() -> String {
     let mut input = String::new();
     eprint!("$ ");
 
-    // Read the initial line
     if io::stdin().read_line(&mut input).is_err() {
         return "Command '<name>' not found".to_string();
     }
@@ -15,7 +14,7 @@ pub fn reading_input() -> String {
     
     // Check if input has an unclosed quote
     while trimmed.chars().filter(|&c| c == '"').count() % 2 != 0 {
-        // If there is an unclosed quote, keep reading more input
+       
         eprint!("dquote> ");
         let mut additional_input = String::new();
         if io::stdin().read_line(&mut additional_input).is_err() {
