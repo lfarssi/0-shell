@@ -22,9 +22,50 @@ pub fn ls(input: &str) -> String {
             path = arg;
         }
     }
+    match fs::metadata(path) {
+        Ok(meta) => {
+            if meta.is_file() {
+                let name = std::path::Path
+                    ::new(path)
+                    .file_name()
+                    .unwrap_or_else(|| std::ffi::OsStr::new(path))
+                    .to_string_lossy()
+                    .to_string();
 
-    let Ok(entries) = fs::read_dir(path) else {
-        return format!("ls: cannot access '{}': No such file or directory", path);
+                if flags.contains('l') {
+                    format_long_entry_dynamic(&mut output, &name, &Some(meta), &flags, 1, 1, 1, 1);
+                    if output.ends_with('\n') {
+                        output.pop();
+                    }
+                } else {
+                    let display_name = if flags.contains('F') && meta.is_dir() {
+                        format!("{}/", name)
+                    } else {
+                        name
+                    };
+                    output.push_str(&display_name);
+                }
+                return output;
+            }
+        }
+        Err(e) => {
+            return format!("ls: cannot access '{}': {}", path, match e.kind() {
+                std::io::ErrorKind::NotFound => "No such file or directory".to_string(),
+                std::io::ErrorKind::PermissionDenied => "Permission denied".to_string(),
+                _ => e.to_string(),
+            });
+        }
+    }
+
+    let entries = match fs::read_dir(path) {
+        Ok(entries) => entries,
+        Err(e) => {
+            return format!("ls: cannot access '{}': {}", path, match e.kind() {
+                std::io::ErrorKind::NotFound => "No such file or directory".to_string(),
+                std::io::ErrorKind::PermissionDenied => "Permission denied".to_string(),
+                _ => e.to_string(),
+            });
+        }
     };
 
     let mut items = Vec::new();
@@ -32,16 +73,45 @@ pub fn ls(input: &str) -> String {
         items.push((".".to_string(), fs::metadata(path).ok()));
         items.push(("..".to_string(), fs::metadata(&format!("{}/..", path)).ok()));
     }
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().to_string();
-        if !name.starts_with('.') || flags.contains('a') {
-            items.push((name, entry.metadata().ok()));
+
+    for entry in entries {
+        match entry {
+            Ok(entry) => {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if !name.starts_with('.') || flags.contains('a') {
+                    items.push((name, entry.metadata().ok()));
+                }
+            }
+            Err(e) => {
+                output.push_str(
+                    &format!("ls: cannot access '{}': {}\n", path, match e.kind() {
+                        std::io::ErrorKind::PermissionDenied => "Permission denied".to_string(),
+                        _ => e.to_string(),
+                    })
+                );
+            }
         }
     }
     items.sort_by(|a, b| {
-        let a_name = if a.0.starts_with('.') { &a.0[1..] } else { &a.0 };
-        let b_name = if b.0.starts_with('.') { &b.0[1..] } else { &b.0 };
-        a_name.to_lowercase().cmp(&b_name.to_lowercase())
+        match (&a.0[..], &b.0[..]) {
+            (".", _) => std::cmp::Ordering::Less,
+            (_, ".") => std::cmp::Ordering::Greater,
+            ("..", _) if a.0 != "." => std::cmp::Ordering::Less,
+            (_, "..") if b.0 != "." => std::cmp::Ordering::Greater,
+            _ => {
+                let a_name = if a.0.starts_with('.') && a.0 != "." && a.0 != ".." {
+                    &a.0[1..]
+                } else {
+                    &a.0
+                };
+                let b_name = if b.0.starts_with('.') && b.0 != "." && b.0 != ".." {
+                    &b.0[1..]
+                } else {
+                    &b.0
+                };
+                a_name.to_lowercase().cmp(&b_name.to_lowercase())
+            }
+        }
     });
     if flags.contains('l') {
         let total: u64 = items
@@ -49,9 +119,53 @@ pub fn ls(input: &str) -> String {
             .filter_map(|(_, meta)| meta.as_ref().map(|m| m.blocks() / 2))
             .sum();
         output.push_str(&format!("total {}\n", total));
+        let max_nlinks_width = items
+            .iter()
+            .filter_map(|(_, meta)| meta.as_ref())
+            .map(|m| m.nlink().to_string().len())
+            .max()
+            .unwrap_or(1);
+
+        let max_user_width = items
+            .iter()
+            .filter_map(|(_, meta)| meta.as_ref())
+            .map(|m|
+                get_user_name(m.uid())
+                    .unwrap_or_else(|| m.uid().to_string())
+                    .len()
+            )
+            .max()
+            .unwrap_or(1);
+
+        let max_group_width = items
+            .iter()
+            .filter_map(|(_, meta)| meta.as_ref())
+            .map(|m|
+                get_group_name(m.gid())
+                    .unwrap_or_else(|| m.gid().to_string())
+                    .len()
+            )
+            .max()
+            .unwrap_or(1);
+
+        let max_size_width = items
+            .iter()
+            .filter_map(|(_, meta)| meta.as_ref())
+            .map(|m| m.len().to_string().len())
+            .max()
+            .unwrap_or(1);
 
         for (name, metadata) in items {
-            format_long_entry(&mut output, &name, &metadata, &flags);
+            format_long_entry_dynamic(
+                &mut output,
+                &name,
+                &metadata,
+                &flags,
+                max_nlinks_width,
+                max_user_width,
+                max_group_width,
+                max_size_width
+            );
         }
         if output.ends_with('\n') {
             output.pop();
@@ -68,12 +182,16 @@ pub fn ls(input: &str) -> String {
 
     output
 }
-// ls -l kamla hia had l function:
-fn format_long_entry(
+// wlit kan7sb size dyal kol element f lista
+fn format_long_entry_dynamic(
     output: &mut String,
     name: &str,
     metadata: &Option<std::fs::Metadata>,
-    flags: &str
+    flags: &str,
+    nlinks_width: usize,
+    user_width: usize,
+    group_width: usize,
+    size_width: usize
 ) {
     if let Some(meta) = metadata {
         let user = get_user_name(meta.uid()).unwrap_or_else(|| meta.uid().to_string());
@@ -85,7 +203,7 @@ fn format_long_entry(
         };
         output.push_str(
             &format!(
-                "{}{} {} {} {} {:>4} {} {}\n",
+                "{}{} {:>width_nlinks$} {:width_user$} {:width_group$} {:>width_size$} {} {}\n",
                 if meta.is_dir() {
                     "d"
                 } else {
@@ -97,7 +215,33 @@ fn format_long_entry(
                 group,
                 meta.len(),
                 format_time(meta.modified().unwrap_or(UNIX_EPOCH)),
-                display_name
+                display_name,
+                width_nlinks = nlinks_width,
+                width_user = user_width,
+                width_group = group_width,
+                width_size = size_width
+            )
+        );
+    } else {
+        let display_name = if flags.contains('F') {
+            format!("{}?", name)
+        } else {
+            name.to_string()
+        };
+
+        output.push_str(
+            &format!(
+                "?????????? {:>width_nlinks$} {:width_user$} {:width_group$} {:>width_size$} {} {}\n",
+                "?",
+                "?",
+                "?",
+                "?",
+                "? ? ?:?",
+                display_name,
+                width_nlinks = nlinks_width,
+                width_user = user_width,
+                width_group = group_width,
+                width_size = size_width
             )
         );
     }
@@ -112,9 +256,39 @@ fn format_short_entry(output: &mut String, name: &str, is_dir: bool, flags: &str
 }
 
 fn format_time(time: SystemTime) -> String {
-    let utc_time: DateTime<Utc> = time.into();
-    let local_time = utc_time.with_timezone(&Local) + chrono::Duration::hours(1);
-    local_time.format("%b %d %H:%M").to_string()
+    use std::mem;
+
+    let duration = time.duration_since(UNIX_EPOCH).unwrap_or_default();
+    let timestamp = duration.as_secs() as libc::time_t;
+
+    unsafe {
+        let mut tm: libc::tm = mem::zeroed();
+        let tm_ptr = libc::localtime_r(&timestamp, &mut tm);
+
+        if !tm_ptr.is_null() && tm.tm_mon >= 0 && tm.tm_mon < 12 {
+            let months = [
+                "Jan",
+                "Feb",
+                "Mar",
+                "Apr",
+                "May",
+                "Jun",
+                "Jul",
+                "Aug",
+                "Sep",
+                "Oct",
+                "Nov",
+                "Dec",
+            ];
+            let month = months[tm.tm_mon as usize];
+
+            format!("{} {:2} {:02}:{:02}", month, tm.tm_mday, tm.tm_hour, tm.tm_min)
+        } else {
+            let utc_time: DateTime<Utc> = time.into();
+            let local_time = utc_time.with_timezone(&Local);
+            local_time.format("%b %d %H:%M").to_string()
+        }
+    }
 }
 // unsafe for libc 7it mafiha ti9a hhhhh
 fn get_user_name(uid: u32) -> Option<String> {
@@ -124,24 +298,36 @@ fn get_user_name(uid: u32) -> Option<String> {
             return None;
         }
 
-        let name_ptr = (*passwd).pw_name;
+        let passwd_ref = &*passwd;
+        let name_ptr = passwd_ref.pw_name;
         if name_ptr.is_null() {
             return None;
         }
 
-        CStr::from_ptr(name_ptr).to_str().ok().map(String::from)
+        match CStr::from_ptr(name_ptr).to_str() {
+            Ok(name) => Some(name.to_string()),
+            Err(_) => None,
+        }
     }
 }
 
 fn get_group_name(gid: u32) -> Option<String> {
     unsafe {
         let group = libc::getgrgid(gid);
-        let name_ptr = (*group).gr_name;
+        if group.is_null() {
+            return None;
+        }
+
+        let group_ref = &*group;
+        let name_ptr = group_ref.gr_name;
         if name_ptr.is_null() {
             return None;
         }
 
-        CStr::from_ptr(name_ptr).to_str().ok().map(String::from)
+        match CStr::from_ptr(name_ptr).to_str() {
+            Ok(name) => Some(name.to_string()),
+            Err(_) => None,
+        }
     }
 }
 // kandn kayna method 7sn l permisstion wlkn for now ankhli hado
