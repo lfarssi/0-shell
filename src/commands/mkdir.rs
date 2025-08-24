@@ -1,16 +1,14 @@
 use std::fs;
 use std::path::Path;
 
-pub fn mkdir(input: &str) -> String {
-    let args: Vec<&str> = input.split_whitespace().collect();
-
-    if args.len() < 2 {
+pub fn mkdir(args: &[String]) -> String {
+    if args.is_empty() {
         return String::from("mkdir: missing operand");
     }
 
     let mut messages = Vec::new();
 
-    for dir in &args[1..] {
+    for dir in args {
         let path = Path::new(dir);
         match fs::create_dir(path) {
             Ok(_) => {}

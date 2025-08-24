@@ -1,20 +1,18 @@
 use std::fs;
-pub fn ls(input: &str) -> String {
-    let mut output = String::new();
-    let args: Vec<&str> = input.split_whitespace().collect();
-    
+pub fn ls(args: &[String]) -> String {
+     let mut output = String::new();
+
     // Determine the directory to list
-    let dir_path = if args.len() > 1 {
-        args[1]  // Use provided path
+    let dir_path = if args.is_empty() {
+        "." // current directory if no argument
     } else {
-        "."      // Use current directory if no path provided
+        &args[0] // first argument = directory
     };
-    
+
     match fs::read_dir(dir_path) {
         Ok(entries) => {
             let mut items = Vec::new();
-            
-            // Collect all entries
+
             for entry in entries {
                 match entry {
                     Ok(entry) => {
@@ -26,24 +24,17 @@ pub fn ls(input: &str) -> String {
                     }
                 }
             }
-            
-            // Sort the items alphabetically
+
             items.sort();
-            
-            // Format output (simple column format)
+
             for item in items {
                 output.push_str(&format!("{}\n", item));
-            }
-            
-            if output.is_empty() {
-                // Directory is empty
-                output.push_str("");
             }
         }
         Err(e) => {
             output.push_str(&format!("ls: {}: {}\n", dir_path, e));
         }
     }
-    
+
     output
 }

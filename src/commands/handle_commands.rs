@@ -1,6 +1,6 @@
 use crate::commands::{ls::ls,cd::cd,cat::cat,echo::echo, exit::exit, cp::cp,pwd::pwd,mkdir::mkdir,clear::clear};
 
-pub fn handle_command(command: &str, input: &str) -> String {
+pub fn handle_command(command: &str, input: &[String]) -> String {
     match command {
         "echo" | r#""echo""# =>  echo(input),
         "pwd" => pwd(),

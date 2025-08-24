@@ -1,11 +1,14 @@
 use std::fs;
 
 
-pub fn cat(input: &str) -> String {
+pub fn cat(args: &[String]) -> String {
+    if args.is_empty() {
+        return String::from("cat: missing operand");
+    }
+
     let mut output = String::new();
-    let files: Vec<&str> = input.split_whitespace().collect();
-    
-    for filename in files.iter().skip(1) {
+
+    for filename in args {
         match fs::read_to_string(filename) {
             Ok(content) => output.push_str(&content),
             Err(e) => {

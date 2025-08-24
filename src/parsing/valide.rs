@@ -22,6 +22,5 @@ pub fn validate_input(input: &str) -> Option<String> {
 
 
 pub fn command_name(s: &str) -> &str {
-
      s.split_whitespace().next().unwrap_or("")
 }
