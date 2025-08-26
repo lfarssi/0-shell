@@ -69,7 +69,6 @@ pub fn tokenize(input: &str) -> Vec<String> {
             }
         }
     }
-
     if !current.is_empty() {
         tokens.push(current);
     }
