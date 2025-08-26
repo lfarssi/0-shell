@@ -8,3 +8,5 @@ pub mod cp;
 pub mod cat;
 pub mod ls;
 pub mod cd;
+pub mod rm ; 
+pub mod mv ; 
