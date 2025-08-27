@@ -5,15 +5,20 @@ pub fn ls(args: &[String]) -> String {
     let mut output = String::new();
 
     let show_all = args.contains(&"-a".to_string());
+let long_format = args.contains(&"-l".to_string());
 
-    let targets: Vec<&str> = {
-        let filtered: Vec<&String> = args.iter().filter(|s| *s != "-a").collect();
-        if filtered.is_empty() {
-            vec!["."]
-        } else {
-            filtered.iter().map(|s| s.as_str()).collect()
-        }
-    };
+let targets: Vec<&str> = {
+    let filtered: Vec<&String> = args
+        .iter()
+        .filter(|s| *s != "-a" && *s != "-l")
+        .collect();
+    if filtered.is_empty() {
+        vec!["."]
+    } else {
+        filtered.iter().map(|s| s.as_str()).collect()
+    }
+};
+
 
     for (i, target) in targets.iter().enumerate() {
         let path = Path::new(target);
