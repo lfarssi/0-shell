@@ -1,38 +1,53 @@
 use std::fs;
-pub fn ls(args: &[String]) -> String {
-     let mut output = String::new();
+use std::path::Path;
 
-    // Determine the directory to list
-    let dir_path = if args.is_empty() {
-        "." // current directory if no argument
-    } else {
-        &args[0] // first argument = directory
+pub fn ls(args: &[String]) -> String {
+    let mut output = String::new();
+
+    let show_all = args.contains(&"-a".to_string());
+
+    let targets: Vec<&str> = {
+        let filtered: Vec<&String> = args.iter().filter(|s| *s != "-a").collect();
+        if filtered.is_empty() {
+            vec!["."]
+        } else {
+            filtered.iter().map(|s| s.as_str()).collect()
+        }
     };
 
-    match fs::read_dir(dir_path) {
-        Ok(entries) => {
-            let mut items = Vec::new();
+    for (i, target) in targets.iter().enumerate() {
+        let path = Path::new(target);
 
-            for entry in entries {
-                match entry {
-                    Ok(entry) => {
-                        let name = entry.file_name().to_string_lossy().to_string();
-                        items.push(name);
+        if targets.len() > 1 {
+            if i > 0 { output.push('\n'); }
+            output.push_str(&format!("{}:\n", target));
+        }
+
+        if path.is_file() {
+            output.push_str(&format!("{}\n", target));
+            continue;
+        }
+
+        match fs::read_dir(path) {
+            Ok(entries) => {
+                let mut items = Vec::new();
+                for entry in entries.flatten() {
+                    let name = entry.file_name().to_string_lossy().to_string();
+
+                    if !show_all && name.starts_with('.') {
+                        continue;
                     }
-                    Err(e) => {
-                        output.push_str(&format!("ls: error reading entry: {}\n", e));
-                    }
+
+                    items.push(name);
+                }
+                items.sort();
+                for item in items {
+                    output.push_str(&format!("{}\n", item));
                 }
             }
-
-            items.sort();
-
-            for item in items {
-                output.push_str(&format!("{}\n", item));
+            Err(e) => {
+                output.push_str(&format!("ls: {}: {}\n", target, e));
             }
-        }
-        Err(e) => {
-            output.push_str(&format!("ls: {}: {}\n", dir_path, e));
         }
     }
 
