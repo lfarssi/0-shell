@@ -47,10 +47,19 @@ pub fn ls(args: &[String]) -> String {
                         match fs::metadata(&item_path) {
                             Ok(m) => {
                                 let size = m.len();
-                                items.push(format!("{:>10} {}", size, name));
+                                let modified = m.modified().ok();
+                                let modified_str = match modified {
+                                    Some(time) => {
+                                        let datetime: chrono::DateTime<chrono::Local> = time.into();
+                                        datetime.format("%Y-%m-%d %H:%M").to_string()
+                                    }
+                                    None => String::from("??????????????"),
+                                };
+
+                                items.push(format!("{:>10} {} {}", size, modified_str, name));
                             }
                             Err(_) => {
-                                items.push(format!("{:>10} {}", 0, name));
+                                items.push(format!("{:>10} {} {}", 0, "??????????????", name));
                             }
                         }
                     } else {
