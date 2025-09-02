@@ -46,7 +46,7 @@ pub fn ls(args: &[String]) -> String {
             Ok(entries) => {
                 let mut items = Vec::new();
                 for entry in entries.flatten() {
-                    let  mut name = entry.file_name().to_string_lossy().to_string();
+                    let mut name = entry.file_name().to_string_lossy().to_string();
 
                     if !show_all && name.starts_with('.') {
                         continue;
@@ -82,10 +82,11 @@ pub fn ls(args: &[String]) -> String {
                                     }
                                     None => String::from("??????????????"),
                                 };
+                                let perms = permissions_string(&m);
 
                                 items.push(format!(
-                                    "{} {:>10} {} {}",
-                                    file_type, size, modified_str, name
+                                    "{}{} {:>10} {} {}",
+                                    file_type,perms, size, modified_str, name
                                 ));
                             }
                             Err(_) => {
@@ -110,7 +111,6 @@ pub fn ls(args: &[String]) -> String {
     output
 }
 
-
 fn suffix_for(m: &fs::Metadata) -> String {
     let ft = m.file_type();
     if ft.is_dir() {
@@ -122,4 +122,25 @@ fn suffix_for(m: &fs::Metadata) -> String {
     } else {
         "".to_string()
     }
+}
+fn permissions_string(metadata: &fs::Metadata) -> String {
+    let mode = metadata.permissions().mode();
+    let mut perms = String::new();
+
+    // Owner
+    perms.push(if mode & 0o400 != 0 { 'r' } else { '-' });
+    perms.push(if mode & 0o200 != 0 { 'w' } else { '-' });
+    perms.push(if mode & 0o100 != 0 { 'x' } else { '-' });
+
+    // Group
+    perms.push(if mode & 0o040 != 0 { 'r' } else { '-' });
+    perms.push(if mode & 0o020 != 0 { 'w' } else { '-' });
+    perms.push(if mode & 0o010 != 0 { 'x' } else { '-' });
+
+    // Others
+    perms.push(if mode & 0o004 != 0 { 'r' } else { '-' });
+    perms.push(if mode & 0o002 != 0 { 'w' } else { '-' });
+    perms.push(if mode & 0o001 != 0 { 'x' } else { '-' });
+
+    perms
 }
