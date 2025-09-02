@@ -1,14 +1,19 @@
 use std::fs;
-use std::path::Path;
+use std::os::unix::fs::PermissionsExt;
+use std::path::Path; // needed for checking executables on Unix
 
 pub fn ls(args: &[String]) -> String {
     let mut output = String::new();
 
     let show_all = args.contains(&"-a".to_string());
     let long_format = args.contains(&"-l".to_string());
+    let classify = args.contains(&"-F".to_string());
 
     let targets: Vec<&str> = {
-        let filtered: Vec<&String> = args.iter().filter(|s| *s != "-a" && *s != "-l").collect();
+        let filtered: Vec<&String> = args
+            .iter()
+            .filter(|s| *s != "-a" && *s != "-l" && *s != "-F")
+            .collect();
         if filtered.is_empty() {
             vec!["."]
         } else {
@@ -27,7 +32,13 @@ pub fn ls(args: &[String]) -> String {
         }
 
         if path.is_file() {
-            output.push_str(&format!("{}\n", target));
+            let mut name = target.to_string();
+            if classify {
+                if let Ok(m) = fs::symlink_metadata(path) {
+                    name.push_str(&suffix_for(&m));
+                }
+            }
+            output.push_str(&format!("{}\n", name));
             continue;
         }
 
@@ -35,7 +46,7 @@ pub fn ls(args: &[String]) -> String {
             Ok(entries) => {
                 let mut items = Vec::new();
                 for entry in entries.flatten() {
-                    let name = entry.file_name().to_string_lossy().to_string();
+                    let  mut name = entry.file_name().to_string_lossy().to_string();
 
                     if !show_all && name.starts_with('.') {
                         continue;
@@ -44,8 +55,24 @@ pub fn ls(args: &[String]) -> String {
                     let item_path = entry.path();
 
                     if long_format {
-                        match fs::metadata(&item_path) {
+                        match fs::symlink_metadata(&item_path) {
                             Ok(m) => {
+                                let file_type = {
+                                    let m2 = m.file_type();
+                                    if m2.is_dir() {
+                                        "d"
+                                    } else if m2.is_file() {
+                                        "-"
+                                    } else if m2.is_symlink() {
+                                        "l"
+                                    } else {
+                                        "?"
+                                    }
+                                };
+                                if classify {
+                                    name.push_str(&suffix_for(&m));
+                                }
+
                                 let size = m.len();
                                 let modified = m.modified().ok();
                                 let modified_str = match modified {
@@ -56,7 +83,10 @@ pub fn ls(args: &[String]) -> String {
                                     None => String::from("??????????????"),
                                 };
 
-                                items.push(format!("{:>10} {} {}", size, modified_str, name));
+                                items.push(format!(
+                                    "{} {:>10} {} {}",
+                                    file_type, size, modified_str, name
+                                ));
                             }
                             Err(_) => {
                                 items.push(format!("{:>10} {} {}", 0, "??????????????", name));
@@ -78,4 +108,18 @@ pub fn ls(args: &[String]) -> String {
     }
 
     output
+}
+
+
+fn suffix_for(m: &fs::Metadata) -> String {
+    let ft = m.file_type();
+    if ft.is_dir() {
+        "/".to_string()
+    } else if ft.is_symlink() {
+        "@".to_string()
+    } else if ft.is_file() && (m.permissions().mode() & 0o111 != 0) {
+        "*".to_string()
+    } else {
+        "".to_string()
+    }
 }
