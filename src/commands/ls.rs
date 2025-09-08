@@ -94,7 +94,7 @@ pub fn ls(args: &[String]) -> String {
                             }
                         }
                     } else {
-                        items.push(name);
+                        items.push(name); 
                     }
                 }
                 items.sort();
