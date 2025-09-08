@@ -10,7 +10,7 @@ pub fn cat(args: &[String]) -> String {
 
     for filename in args {
         match fs::read_to_string(filename) {
-            Ok(content) => output.push_str(&content),
+            Ok(content) =>output.push_str(content.trim_end()),
             Err(e) => {
                 output.push_str(&format!("cat: {}: {}\n", filename, e));
             }
