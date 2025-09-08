@@ -1,5 +1,5 @@
 use std::io;
-
+use crate::commands::echo::run_subcommand;
 use crate::{
     commands::handle_commands::handle_command,
     parsing::valide::validate_input,
@@ -11,21 +11,11 @@ pub fn reading_input() -> String {
     let read_inp = io::stdin().read_line(&mut input);
     match read_inp {
         Ok(0) => {
-            println!(); // move to a new line like real shells
+           
             std::process::exit(0);
         }
         Ok(_) => {
-            let mut trimmed = input.trim().to_string();
-
-            // Check if input has an unclosed quote
-            while trimmed.chars().filter(|&c| c == '"').count() % 2 != 0 {
-                eprint!("dquote> ");
-                let mut additional_input = String::new();
-                if io::stdin().read_line(&mut additional_input).is_err() {
-                    return "Error reading input".to_string();
-                }
-                trimmed.push_str(&additional_input.trim());
-            }
+            let trimmed = input.trim().to_string();
             let tokens = tokenize(&trimmed);
 
             if tokens.is_empty() {
@@ -49,28 +39,53 @@ pub fn reading_input() -> String {
 pub fn tokenize(input: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut inside_quote = false;
+    let mut inside_backtick = false;
     let mut current = String::new();
     let mut chars = input.chars().peekable();
 
     while let Some(c) = chars.next() {
         match c {
             '"' => {
-                inside_quote = !inside_quote;
+                if !inside_backtick {
+                    inside_quote = !inside_quote;
+                    current.push(c);
+                } else {
+                    current.push(c);
+                }
+            }
+            '`' => {
+                if !inside_quote {
+                    if inside_backtick {
+                        // End of backtick, execute subcommand
+                        let output = run_subcommand(&current);
+                        tokens.push(output);
+                        current.clear();
+                        inside_backtick = false;
+                    } else {
+                        inside_backtick = true;
+                        current.clear(); // Start collecting subcommand
+                    }
+                } else {
+                    current.push(c);
+                }
             }
             ' ' => {
-                if !current.is_empty() {
+                if inside_quote || inside_backtick {
+                    current.push(c);
+                } else if !current.is_empty() {
                     tokens.push(current.clone());
                     current.clear();
                 }
             }
-
             _ => {
                 current.push(c);
             }
         }
     }
+
     if !current.is_empty() {
         tokens.push(current);
     }
+
     tokens
 }

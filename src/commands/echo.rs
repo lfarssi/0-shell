@@ -1,5 +1,6 @@
-use std::process::Command;
-
+use crate::commands::handle_commands::handle_command;
+use crate::parsing::valide::validate_input;
+use crate::parsing::input::tokenize;
 pub fn echo(input: &[String]) -> String {
     let mut result = Vec::new();
 
@@ -9,27 +10,15 @@ pub fn echo(input: &[String]) -> String {
         let mut cmd = String::new();
 
         for c in arg.chars() {
-            if c == '`' {
-                if inside_bt {
-                    // closing backtick -> run the command
-                    let parts: Vec<&str> = cmd.split_whitespace().collect();
-                    if !parts.is_empty() {
-                        let output = Command::new(parts[0])
-                            .args(&parts[1..])
-                            .output();
-
-                        match output {
-                            Ok(o) => {
-                                let out_str =
-                                    String::from_utf8_lossy(&o.stdout).trim().to_string();
-                                expanded.push_str(&out_str);
-                            }
-                            Err(_) => expanded.push_str(&format!("`{}`", cmd)),
-                        }
-                    }
-                    cmd.clear();
-                }
-                inside_bt = !inside_bt;
+            if c == '`' && !inside_bt {
+                inside_bt = true;
+                cmd.clear();
+            } else if c == '`' && inside_bt {
+                // Run subcommand
+                let out_str = run_subcommand(&cmd);
+                expanded.push_str(&out_str);
+                cmd.clear();
+                inside_bt = false;
             } else if inside_bt {
                 cmd.push(c);
             } else {
@@ -37,8 +26,8 @@ pub fn echo(input: &[String]) -> String {
             }
         }
 
-        // if still inside backticks (unclosed), keep them as text
         if inside_bt {
+            // Handle unclosed backtick
             expanded.push('`');
             expanded.push_str(&cmd);
         }
@@ -47,4 +36,22 @@ pub fn echo(input: &[String]) -> String {
     }
 
     result.join(" ")
+}
+
+pub fn run_subcommand(line: &str) -> String {
+    let tokens: Vec<String> = tokenize(line); // Use tokenize to handle nested commands
+    if tokens.is_empty() {
+        return "".to_string();
+    }
+    let cmd = &tokens[0];
+    let args = &tokens[1..];
+    match validate_input(cmd) {
+        Some(_) => handle_command(cmd, args),
+        None => {
+            match std::process::Command::new(cmd).args(args).output() {
+                Ok(o) => String::from_utf8_lossy(&o.stdout).trim().to_string(),
+                Err(_) => format!("Command '{}' not found", cmd),
+            }
+        }
+    }
 }
