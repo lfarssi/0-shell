@@ -11,7 +11,6 @@ pub fn reading_input() -> String {
     let read_inp = io::stdin().read_line(&mut input);
     match read_inp {
         Ok(0) => {
-           
             std::process::exit(0);
         }
         Ok(_) => {
@@ -41,32 +40,32 @@ pub fn tokenize(input: &str) -> Vec<String> {
     let mut inside_quote = false;
     let mut inside_backtick = false;
     let mut current = String::new();
-    let mut chars = input.chars().peekable();
+    let mut backtick_depth = 0;
 
+    let mut chars = input.chars().peekable();
     while let Some(c) = chars.next() {
         match c {
-            '"' => {
-                if !inside_backtick {
-                    inside_quote = !inside_quote;
-                    current.push(c);
-                } else {
-                    current.push(c);
-                }
+            '"' if !inside_backtick => {
+                inside_quote = !inside_quote;
+                current.push(c);
             }
             '`' => {
-                if !inside_quote {
+                if inside_quote && backtick_depth == 0 {
+                    current.push(c);
+                } else {
                     if inside_backtick {
-                        // End of backtick, execute subcommand
-                        let output = run_subcommand(&current);
-                        tokens.push(output);
-                        current.clear();
-                        inside_backtick = false;
+                        backtick_depth -= 1;
+                        if backtick_depth == 0 {
+                            inside_backtick = false;
+                            current.push(c);
+                        } else {
+                            current.push(c);
+                        }
                     } else {
                         inside_backtick = true;
-                        current.clear(); // Start collecting subcommand
+                        backtick_depth += 1;
+                        current.push(c);
                     }
-                } else {
-                    current.push(c);
                 }
             }
             ' ' => {
