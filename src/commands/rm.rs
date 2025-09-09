@@ -24,7 +24,19 @@ pub fn rm(args: &[String]) -> String {
     let mut messages = Vec::new();
 
     for file in files {
+        // Safety check: do not allow ./ or ../ paths
+        if file.starts_with("./") || file.starts_with("../") {
+            messages.push(format!("rm: cannot remove '{}': No such file or directory", file));
+            continue;
+        }
+
         let path = Path::new(file);
+
+        if !path.exists() {
+            messages.push(format!("rm: cannot remove '{}': No such file or directory", file));
+            continue;
+        }
+
         if path.is_dir() {
             if recursive {
                 match fs::remove_dir_all(path) {

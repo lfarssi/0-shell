@@ -2,7 +2,7 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
-use chrono::{DateTime, Local, TimeZone, Datelike};
+use chrono::{ TimeZone, Datelike};
 use users::{get_user_by_uid, get_group_by_gid};
 
 pub fn ls(args: &[String]) -> String {
@@ -67,7 +67,7 @@ pub fn ls(args: &[String]) -> String {
                 }
                 // Sort by name, case-sensitive, like real ls
                 items.sort_by(|a, b| a.0.cmp(&b.0));
-                for (mut name, meta) in items {
+                for ( name, meta) in items {
                     if long_format {
                         if let Some(m) = meta {
                             let mut display_name = name.clone();
