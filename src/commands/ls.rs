@@ -1,28 +1,39 @@
+use chrono::{Datelike, TimeZone};
 use std::fs;
-use std::os::unix::fs::PermissionsExt;
 use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
-use chrono::{ TimeZone, Datelike};
-use users::{get_user_by_uid, get_group_by_gid};
+use users::{get_group_by_gid, get_user_by_uid};
 
 pub fn ls(args: &[String]) -> String {
     let mut output = String::new();
 
-    let show_all = args.contains(&"-a".to_string());
-    let long_format = args.contains(&"-l".to_string());
-    let classify = args.contains(&"-F".to_string());
+    let mut show_all = false;
+    let mut long_format = false;
+    let mut classify = false;
 
-    let targets: Vec<&str> = {
-        let filtered: Vec<&String> = args
-            .iter()
-            .filter(|s| *s != "-a" && *s != "-l" && *s != "-F")
-            .collect();
-        if filtered.is_empty() {
-            vec!["."]
+    let mut targets: Vec<&str> = Vec::new();
+
+    for arg in args {
+        if arg.starts_with('-') {
+            for ch in arg.chars().skip(1) {
+                // skip the '-'
+                match ch {
+                    'a' => show_all = true,
+                    'l' => long_format = true,
+                    'F' => classify = true,
+                    _ => {
+                        output.push_str(&format!("ls: invalid option -- '{}'\n", ch));
+                    }
+                }
+            }
         } else {
-            filtered.iter().map(|s| s.as_str()).collect()
+            targets.push(arg.as_str());
         }
-    };
+    }
+    if targets.is_empty() {
+        targets.push(".");
+    }
 
     for (i, target) in targets.iter().enumerate() {
         let path = Path::new(target);
@@ -67,7 +78,7 @@ pub fn ls(args: &[String]) -> String {
                 }
                 // Sort by name, case-sensitive, like real ls
                 items.sort_by(|a, b| a.0.cmp(&b.0));
-                for ( name, meta) in items {
+                for (name, meta) in items {
                     if long_format {
                         if let Some(m) = meta {
                             let mut display_name = name.clone();
