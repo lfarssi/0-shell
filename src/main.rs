@@ -10,6 +10,6 @@ loop {
         if result.trim().len()==0 {
             continue;
         }
-        print!("{}", result);
+        println!("{}", result);
     }
 }
