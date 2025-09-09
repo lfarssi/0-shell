@@ -8,38 +8,61 @@ pub fn echo(input: &[String]) -> String {
         let mut expanded = String::new();
         let mut inside_bt = false;
         let mut cmd = String::new();
+        let mut inside_quote = false;
+        let mut backtick_depth = 0;
 
-        for c in arg.chars() {
-            if c == '`' && !inside_bt {
-                inside_bt = true;
-                cmd.clear();
-            } else if c == '`' && inside_bt {
-                // Run subcommand
-                let out_str = run_subcommand(&cmd);
-                expanded.push_str(&out_str);
-                cmd.clear();
-                inside_bt = false;
-            } else if inside_bt {
-                cmd.push(c);
-            } else {
-                expanded.push(c);
+        let mut chars = arg.chars().peekable();
+        while let Some(c) = chars.next() {
+            match c {
+                '"' if !inside_bt => {
+                    inside_quote = !inside_quote;
+                    // Do not include quotes in the output
+                    continue;
+                }
+                '`' => {
+                    if inside_bt {
+                        backtick_depth -= 1;
+                        if backtick_depth == 0 {
+                            // Run subcommand, which may contain nested backticks
+                            let out_str = run_subcommand(&cmd);
+                            expanded.push_str(&out_str);
+                            cmd.clear();
+                            inside_bt = false;
+                        } else {
+                            cmd.push(c);
+                        }
+                    } else {
+                        inside_bt = true;
+                        backtick_depth += 1;
+                        cmd.clear();
+                    }
+                }
+                _ => {
+                    if inside_bt {
+                        cmd.push(c);
+                    } else {
+                        expanded.push(c);
+                    }
+                }
             }
         }
 
         if inside_bt {
-            // Handle unclosed backtick
+            // Handle unclosed backtick by treating it as literal
             expanded.push('`');
             expanded.push_str(&cmd);
         }
 
-        result.push(expanded);
+        if !expanded.is_empty() {
+            result.push(expanded);
+        }
     }
 
     result.join(" ")
 }
 
 pub fn run_subcommand(line: &str) -> String {
-    let tokens: Vec<String> = tokenize(line); // Use tokenize to handle nested commands
+    let tokens = tokenize(line);
     if tokens.is_empty() {
         return "".to_string();
     }
