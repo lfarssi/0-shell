@@ -9,7 +9,7 @@ pub fn cat(args: &[String]) -> String {
 
     for (index, filename) in args.iter().enumerate() {
         match fs::read_to_string(filename) {
-            Ok(content) => output.push_str(&content);
+            Ok(content) => output.push_str(&content),
             Err(e) => {
                 output.push_str(&format!("cat: {}: {}", filename, e));
             }

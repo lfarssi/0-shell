@@ -1,6 +1,9 @@
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
-use std::path::Path; // needed for checking executables on Unix
+use std::os::unix::fs::MetadataExt;
+use std::path::Path;
+use chrono::{DateTime, Local, TimeZone, Datelike};
+use users::{get_user_by_uid, get_group_by_gid};
 
 pub fn ls(args: &[String]) -> String {
     let mut output = String::new();
@@ -38,68 +41,46 @@ pub fn ls(args: &[String]) -> String {
                     name.push_str(&suffix_for(&m));
                 }
             }
-            output.push_str(&format!("{}\n", name));
+            if long_format {
+                if let Ok(m) = fs::symlink_metadata(path) {
+                    output.push_str(&format!("{}\n", long_format_line(&m, &name)));
+                } else {
+                    output.push_str(&format!("{}\n", name));
+                }
+            } else {
+                output.push_str(&format!("{}\n", name));
+            }
             continue;
         }
 
         match fs::read_dir(path) {
             Ok(entries) => {
-                let mut items = Vec::new();
+                let mut items: Vec<(String, Option<fs::Metadata>)> = Vec::new();
                 for entry in entries.flatten() {
-                    let mut name = entry.file_name().to_string_lossy().to_string();
-
+                    let name = entry.file_name().to_string_lossy().to_string();
                     if !show_all && name.starts_with('.') {
                         continue;
                     }
-
                     let item_path = entry.path();
-
+                    let meta = fs::symlink_metadata(&item_path).ok();
+                    items.push((name, meta));
+                }
+                // Sort by name, case-sensitive, like real ls
+                items.sort_by(|a, b| a.0.cmp(&b.0));
+                for (mut name, meta) in items {
                     if long_format {
-                        match fs::symlink_metadata(&item_path) {
-                            Ok(m) => {
-                                let file_type = {
-                                    let m2 = m.file_type();
-                                    if m2.is_dir() {
-                                        "d"
-                                    } else if m2.is_file() {
-                                        "-"
-                                    } else if m2.is_symlink() {
-                                        "l"
-                                    } else {
-                                        "?"
-                                    }
-                                };
-                                if classify {
-                                    name.push_str(&suffix_for(&m));
-                                }
-
-                                let size = m.len();
-                                let modified = m.modified().ok();
-                                let modified_str = match modified {
-                                    Some(time) => {
-                                        let datetime: chrono::DateTime<chrono::Local> = time.into();
-                                        datetime.format("%Y-%m-%d %H:%M").to_string()
-                                    }
-                                    None => String::from("??????????????"),
-                                };
-                                let perms = permissions_string(&m);
-
-                                items.push(format!(
-                                    "{}{} {:>10} {} {}",
-                                    file_type,perms, size, modified_str, name
-                                ));
+                        if let Some(m) = meta {
+                            let mut display_name = name.clone();
+                            if classify {
+                                display_name.push_str(&suffix_for(&m));
                             }
-                            Err(_) => {
-                                items.push(format!("{:>10} {} {}", 0, "??????????????", name));
-                            }
+                            output.push_str(&format!("{}\n", long_format_line(&m, &display_name)));
+                        } else {
+                            output.push_str(&format!("?????????? {} {}\n", 0, name));
                         }
                     } else {
-                        items.push(name); 
+                        output.push_str(&format!("{}\n", name));
                     }
-                }
-                items.sort();
-                for item in items {
-                    output.push_str(&format!("{}\n", item));
                 }
             }
             Err(e) => {
@@ -109,6 +90,46 @@ pub fn ls(args: &[String]) -> String {
     }
 
     output
+}
+
+fn long_format_line(metadata: &fs::Metadata, name: &str) -> String {
+    let file_type = {
+        let ft = metadata.file_type();
+        if ft.is_dir() {
+            'd'
+        } else if ft.is_symlink() {
+            'l'
+        } else if ft.is_file() {
+            '-'
+        } else {
+            '?'
+        }
+    };
+    let perms = permissions_string(metadata);
+    let nlink = metadata.nlink();
+    let uid = metadata.uid();
+    let gid = metadata.gid();
+    let user = get_user_by_uid(uid)
+        .map(|u| u.name().to_string_lossy().to_string())
+        .unwrap_or(uid.to_string());
+    let group = get_group_by_gid(gid)
+        .map(|g| g.name().to_string_lossy().to_string())
+        .unwrap_or(gid.to_string());
+    let size = metadata.len();
+    let mtime = metadata.mtime();
+    // Convert mtime to local time using chrono::Local
+    let datetime = chrono::Local.timestamp(mtime, 0);
+    let now = chrono::Local::now();
+    // ls shows year if not this year, else HH:MM
+    let date_str = if datetime.year() == now.year() {
+        datetime.format("%b %e %H:%M").to_string()
+    } else {
+        datetime.format("%b %e  %Y").to_string()
+    };
+    format!(
+        "{}{} {:>2} {:<8} {:<8} {:>8} {} {}",
+        file_type, perms, nlink, user, group, size, date_str, name
+    )
 }
 
 fn suffix_for(m: &fs::Metadata) -> String {
@@ -123,6 +144,7 @@ fn suffix_for(m: &fs::Metadata) -> String {
         "".to_string()
     }
 }
+
 fn permissions_string(metadata: &fs::Metadata) -> String {
     let mode = metadata.permissions().mode();
     let mut perms = String::new();

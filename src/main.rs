@@ -1,3 +1,5 @@
+extern crate chrono;
+extern crate users;
 mod parsing;
 mod commands;
 fn main() {
