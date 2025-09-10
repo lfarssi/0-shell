@@ -10,12 +10,19 @@ pub fn cd(args: &[String]) -> String {
         env::var("HOME").or_else(|_| env::var("USERPROFILE")).unwrap_or_else(|_| {
             return "cd: No home directory found (HOME or USERPROFILE not set)".to_string();
         })
-    } else if args[0].trim() == "-" {
-        env::var("OLDPWD").unwrap_or_else(|_| {
-            return "cd: OLDPWD not set".to_string();
-        })
     } else {
-        args[0].clone()
+        let arg = args[0].trim();
+        if arg == "-" {
+            env::var("OLDPWD").unwrap_or_else(|_| {
+                return "cd: OLDPWD not set".to_string();
+            })
+        } else if arg == "~" {
+            env::var("HOME").or_else(|_| env::var("USERPROFILE")).unwrap_or_else(|_| {
+                return "cd: No home directory found (HOME or USERPROFILE not set)".to_string();
+            })
+        } else {
+            args[0].clone()
+        }
     };
 
     // Attempt to change directory
