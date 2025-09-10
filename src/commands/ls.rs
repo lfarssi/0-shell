@@ -17,7 +17,6 @@ pub fn ls(args: &[String]) -> String {
     for arg in args {
         if arg.starts_with('-') {
             for ch in arg.chars().skip(1) {
-                // skip the '-'
                 match ch {
                     'a' => show_all = true,
                     'l' => long_format = true,
@@ -39,9 +38,6 @@ pub fn ls(args: &[String]) -> String {
         let path = Path::new(target);
 
         if targets.len() > 1 {
-            if i > 0 {
-                output.push('\n');
-            }
             output.push_str(&format!("{}:\n", target));
         }
 
@@ -98,6 +94,9 @@ pub fn ls(args: &[String]) -> String {
                 output.push_str(&format!("ls: {}: {}\n", target, e));
             }
         }
+    }
+    if output.ends_with('\n') {
+        output.pop();
     }
 
     output
