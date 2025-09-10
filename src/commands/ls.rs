@@ -63,6 +63,13 @@ pub fn ls(args: &[String]) -> String {
         match fs::read_dir(path) {
             Ok(entries) => {
                 let mut items: Vec<(String, Option<fs::Metadata>)> = Vec::new();
+                if show_all {
+                    // Insert '.' and '..' at the start
+                    let dot = path.join(".");
+                    let dotdot = path.join("..");
+                    items.push((".".to_string(), fs::symlink_metadata(&dot).ok()));
+                    items.push(("..".to_string(), fs::symlink_metadata(&dotdot).ok()));
+                }
                 for entry in entries.flatten() {
                     let name = entry.file_name().to_string_lossy().to_string();
                     if !show_all && name.starts_with('.') {
@@ -72,8 +79,15 @@ pub fn ls(args: &[String]) -> String {
                     let meta = fs::symlink_metadata(&item_path).ok();
                     items.push((name, meta));
                 }
-                // Sort by name, case-sensitive, like real ls
-                items.sort_by(|a, b| a.0.cmp(&b.0));
+                // sort list , ls we keep '.'  w '..' at the top
+                if show_all {
+                    let (special, mut rest): (Vec<_>, Vec<_>) = items.into_iter().partition(|(n,_)| n == "." || n == ".." );
+                    let mut rest_sorted = rest;
+                    rest_sorted.sort_by(|a, b| a.0.cmp(&b.0));
+                    items = [special, rest_sorted].concat();
+                } else {
+                    items.sort_by(|a, b| a.0.cmp(&b.0));
+                }
                 for (name, meta) in items {
                     if long_format {
                         if let Some(m) = meta {
