@@ -88,21 +88,67 @@ pub fn ls(args: &[String]) -> String {
                 } else {
                     items.sort_by(|a, b| a.0.cmp(&b.0));
                 }
-                for (name, meta) in items {
+                // Calculate total blocks for long format
+                if long_format {
+                    let total_blocks: u64 = items.iter()
+                        .filter_map(|(_, meta)| meta.as_ref())
+                        .map(|m| m.blocks() as u64)
+                        .sum();
+                    output.push_str(&format!("total {}\n", total_blocks));
+                }
+
+                let mut short_names = Vec::new();
+                for (name, meta) in &items {
                     let mut display_name = name.clone();
                     if let Some(m) = meta.as_ref() {
                         if classify {
-                            display_name.push_str(&suffix_for(m));
+                            // For symlinks: if executable, use *, else @
+                            if m.file_type().is_symlink() {
+                                if let Ok(target_meta) = std::fs::metadata(Path::new(&name)) {
+                                    if target_meta.permissions().mode() & 0o111 != 0 {
+                                        display_name.push('*');
+                                    } else {
+                                        display_name.push('@');
+                                    }
+                                } else {
+                                    display_name.push('@');
+                                }
+                            } else {
+                                display_name.push_str(&suffix_for(m));
+                            }
                         }
+                        // Add suffix for . and .. in long format with -F
+                        // if long_format && classify && (name == "." || name == "..") {
+                        //     if m.file_type().is_dir() {
+                        //        // display_name.push('/');
+                        //     }
+                        // }
                         if long_format {
                             output.push_str(&format!("{}\n", long_format_line(m, &display_name)));
                         } else {
-                            output.push_str(&format!("{}\n", display_name));
+                            short_names.push(display_name);
                         }
                     } else if long_format {
                         output.push_str(&format!("?????????? {} {}\n", 0, name));
                     } else {
-                        output.push_str(&format!("{}\n", display_name));
+                        short_names.push(display_name);
+                    }
+                }
+                // Print short format in columns (simple, space-separated)
+                if !long_format {
+                    let col_width = short_names.iter().map(|s| s.len()).max().unwrap_or(0) + 2;
+                    let term_width = 80; // fallback if can't get terminal width
+                    let cols = if col_width == 0 { 1 } else { term_width / col_width };
+                    for (i, name) in short_names.iter().enumerate() {
+                        output.push_str(name);
+                        let is_last = i == short_names.len() - 1;
+                        if (i + 1) % cols == 0 || is_last {
+                            output.push('\n');
+                        } else {
+                            for _ in 0..(col_width - name.len()) {
+                                output.push(' ');
+                            }
+                        }
                     }
                 }
             }
