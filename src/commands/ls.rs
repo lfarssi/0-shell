@@ -89,18 +89,20 @@ pub fn ls(args: &[String]) -> String {
                     items.sort_by(|a, b| a.0.cmp(&b.0));
                 }
                 for (name, meta) in items {
-                    if long_format {
-                        if let Some(m) = meta {
-                            let mut display_name = name.clone();
-                            if classify {
-                                display_name.push_str(&suffix_for(&m));
-                            }
-                            output.push_str(&format!("{}\n", long_format_line(&m, &display_name)));
-                        } else {
-                            output.push_str(&format!("?????????? {} {}\n", 0, name));
+                    let mut display_name = name.clone();
+                    if let Some(m) = meta.as_ref() {
+                        if classify {
+                            display_name.push_str(&suffix_for(m));
                         }
+                        if long_format {
+                            output.push_str(&format!("{}\n", long_format_line(m, &display_name)));
+                        } else {
+                            output.push_str(&format!("{}\n", display_name));
+                        }
+                    } else if long_format {
+                        output.push_str(&format!("?????????? {} {}\n", 0, name));
                     } else {
-                        output.push_str(&format!("{}\n", name));
+                        output.push_str(&format!("{}\n", display_name));
                     }
                 }
             }
