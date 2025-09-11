@@ -7,7 +7,6 @@ use users::{get_group_by_gid, get_user_by_uid};
 
 pub fn ls(args: &[String]) -> String {
     let mut output = String::new();
-
     let mut show_all = false;
     let mut long_format = false;
     let mut classify = false;
@@ -36,7 +35,7 @@ pub fn ls(args: &[String]) -> String {
 
     for (i, target) in targets.iter().enumerate() {
         let path = Path::new(target);
-
+        
         if targets.len() > 1 {
             output.push_str(&format!("{}:\n", target));
         }
