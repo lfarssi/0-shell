@@ -33,11 +33,19 @@ pub fn ls(args: &[String]) -> String {
         targets.push(".");
     }
 
+    fn format_name(name: &str) -> String {
+        if name.contains(' ') || name == "[" {
+            format!("'{}'", name)
+        } else {
+            name.to_string()
+        }
+    }
+
     for (_, target) in targets.iter().enumerate() {
         let path = Path::new(target);
 
         if targets.len() > 1 {
-            output.push_str(&format!("{}:\n", target));
+            output.push_str(&format!("{}:\n", format_name(target)));
         }
 
         if path.is_file() {
@@ -82,7 +90,6 @@ pub fn ls(args: &[String]) -> String {
                         continue;
                     }
                     let item_path = entry.path();
-                    println!("Reading entry: {:?}", item_path);
                     let meta = fs::symlink_metadata(&item_path).ok();
                     items.push((name, item_path, meta));
                 }
@@ -150,12 +157,27 @@ pub fn ls(args: &[String]) -> String {
                         term_width / col_width
                     };
                     for (i, name) in short_names.iter().enumerate() {
-                        output.push_str(name);
+                        let formatted_name = format_name(name);
+                        let display_width = if formatted_name.starts_with('\'') {
+                            formatted_name.len() - 2 // Subtract quotes for alignment
+                        } else {
+                            formatted_name.len()
+                        };
+                        
+                        if formatted_name.starts_with('\'') {
+                            output.push_str(&formatted_name);
+                        } else if short_names.iter().any(|n| format_name(n).starts_with('\'')) {
+                            output.push(' '); // Add space for alignment with quoted names
+                            output.push_str(&formatted_name);
+                        } else {
+                            output.push_str(&formatted_name);
+                        }
+                        
                         let is_last = i == short_names.len() - 1;
                         if (i + 1) % cols == 0 || is_last {
                             output.push('\n');
                         } else {
-                            for _ in 0..(col_width - name.len()) {
+                            for _ in 0..(col_width - display_width) {
                                 output.push(' ');
                             }
                         }
