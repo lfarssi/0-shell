@@ -1,8 +1,5 @@
 use std::io;
-use crate::{
-    commands::handle_commands::handle_command,
-    parsing::valide::validate_input,
-};
+use crate::{ commands::handle_commands::handle_command, parsing::valide::validate_input };
 pub fn reading_input() -> String {
     let mut input = String::new();
     eprint!("$ ");
@@ -17,8 +14,15 @@ pub fn reading_input() -> String {
             let mut trimmed = input.trim_end().to_string();
 
             // Keep reading if quotes are not closed
-            while (trimmed.chars().filter(|&c| c == '"').count() % 2 != 0)
-                || (trimmed.chars().filter(|&c| c == '\'').count() % 2 != 0)
+            while
+                trimmed
+                    .chars()
+                    .filter(|&c| c == '"')
+                    .count() % 2 != 0 ||
+                trimmed
+                    .chars()
+                    .filter(|&c| c == '\'')
+                    .count() % 2 != 0
             {
                 eprint!("> ");
                 let mut additional_input = String::new();
@@ -27,6 +31,19 @@ pub fn reading_input() -> String {
                 }
                 // keep the newline if inside quotes
                 trimmed.push('\n');
+                trimmed.push_str(additional_input.trim_end());
+            }
+
+            while trimmed.ends_with('\\') {
+                // remove the trailing backslash before appending new line
+                trimmed.pop();
+
+                eprint!("> ");
+                let mut additional_input = String::new();
+                if io::stdin().read_line(&mut additional_input).is_err() {
+                    return "Error reading input".to_string();
+                }
+                // append continuation (no extra '\n')
                 trimmed.push_str(additional_input.trim_end());
             }
 
