@@ -134,10 +134,11 @@ pub fn ls(args: &[String]) -> String {
                         //     }
                         // }
                         if long_format {
-                            output.push_str(&format!(
-                                "{}\n",
-                                long_format_line(item_path, m, &display_name)
-                            ));
+                            let formatted_name = format_name(&display_name);
+                        output.push_str(&format!(
+                            "{}\n",
+                            long_format_line(item_path, m, &formatted_name)
+                        ));
                         } else {
                             short_names.push(display_name);
                         }
@@ -158,29 +159,16 @@ pub fn ls(args: &[String]) -> String {
                     };
                     for (i, name) in short_names.iter().enumerate() {
                         let formatted_name = format_name(name);
-                        let display_width = if formatted_name.starts_with('\'') {
-                            formatted_name.len() - 2 // Subtract quotes for alignment
-                        } else {
-                            formatted_name.len()
-                        };
                         
-                        if formatted_name.starts_with('\'') {
-                            output.push_str(&formatted_name);
-                        } else if short_names.iter().any(|n| format_name(n).starts_with('\'')) {
+                        if !formatted_name.starts_with('\'') && short_names.iter().any(|n| format_name(n).starts_with('\'')) {
                             output.push(' '); // Add space for alignment with quoted names
-                            output.push_str(&formatted_name);
-                        } else {
-                            output.push_str(&formatted_name);
                         }
+                        output.push_str(&formatted_name);
                         
                         let is_last = i == short_names.len() - 1;
                         if (i + 1) % cols == 0 || is_last {
                             output.push('\n');
-                        } else {
-                            for _ in 0..(col_width - display_width) {
-                                output.push(' ');
-                            }
-                        }
+                        } 
                     }
                 }
             }
