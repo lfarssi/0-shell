@@ -36,17 +36,17 @@ pub fn rm(args: &[String]) -> String {
 
         // Check if current working directory is inside or is the directory to be deleted
         if path.is_dir() {
-            if let Ok(current_dir) = std::env::current_dir() {
-                if let (Ok(target), Ok(cwd)) = (path.canonicalize(), current_dir.canonicalize()) {
-                    if cwd == target || cwd.starts_with(&target) {
-                        messages.push(format!(
-                            "rm: refusing to remove '{}': Directory is current working directory or its ancestor",
-                            file
-                        ));
-                        continue;
-                    }
-                }
-            }
+            // if let Ok(current_dir) = std::env::current_dir() {
+            //     if let (Ok(target), Ok(cwd)) = (path.canonicalize(), current_dir.canonicalize()) {
+            //         if cwd == target || cwd.starts_with(&target) {
+            //             messages.push(format!(
+            //                 "rm: refusing to remove '{}': Directory is current working directory or its ancestor",
+            //                 file
+            //             ));
+            //             continue;
+            //         }
+            //     }
+            // }
         }
 
 

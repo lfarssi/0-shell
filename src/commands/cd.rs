@@ -3,8 +3,9 @@ use std::path::Path;
 
 pub fn cd(args: &[String]) -> String {
     // Save current directory
-    let current_dir = env::current_dir().unwrap().to_string_lossy().into_owned();
-
+   let current_dir = env::current_dir()
+        .map(|d| d.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| String::new());
     // Determine target directory
     let target = if args.is_empty() {
         env::var("HOME").or_else(|_| env::var("USERPROFILE")).unwrap_or_else(|_| {
@@ -29,9 +30,13 @@ pub fn cd(args: &[String]) -> String {
     let result = change_directory(&target);
 
     // If successful, update OLDPWD
-    if result.is_empty() {
-        env::set_var("OLDPWD", current_dir);
+    if result.is_empty() && !current_dir.is_empty() {
+    env::set_var("OLDPWD", current_dir);
+
+    if let Ok(new_dir) = env::current_dir() {
+        env::set_var("PWD", new_dir.to_string_lossy().to_string());
     }
+}
 
     result
 }
