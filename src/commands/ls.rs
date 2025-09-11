@@ -135,10 +135,18 @@ pub fn ls(args: &[String]) -> String {
                         // }
                         if long_format {
                             let formatted_name = format_name(&display_name);
-                        output.push_str(&format!(
-                            "{}\n",
-                            long_format_line(item_path, m, &formatted_name)
-                        ));
+                            
+                        if !formatted_name.starts_with('\''){     
+                            output.push_str(&format!(
+                                "{}\n",
+                                long_format_line(item_path, m, &format!(" {}",formatted_name))
+                            ));
+                        } else {
+                            output.push_str(&format!(
+                                "{}\n",
+                                long_format_line(item_path, m, &formatted_name)
+                            ));
+                        }
                         } else {
                             short_names.push(display_name);
                         }
@@ -161,7 +169,6 @@ pub fn ls(args: &[String]) -> String {
                         let formatted_name = format_name(name);
                         
                         if !formatted_name.starts_with('\'') && short_names.iter().any(|n| format_name(n).starts_with('\'')) {
-                            output.push(' '); // Add space for alignment with quoted names
                         }
                         output.push_str(&formatted_name);
                         

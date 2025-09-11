@@ -1,5 +1,5 @@
+use crate::{commands::handle_commands::handle_command, parsing::valide::validate_input};
 use std::io;
-use crate::{ commands::handle_commands::handle_command, parsing::valide::validate_input };
 pub fn reading_input() -> String {
     let mut input = String::new();
     eprint!("$ ");
@@ -14,15 +14,8 @@ pub fn reading_input() -> String {
             let mut trimmed = input.trim_end().to_string();
 
             // Keep reading if quotes are not closed
-            while
-                trimmed
-                    .chars()
-                    .filter(|&c| c == '"')
-                    .count() % 2 != 0 ||
-                trimmed
-                    .chars()
-                    .filter(|&c| c == '\'')
-                    .count() % 2 != 0
+            while count_unescaped(&trimmed, '"') % 2 != 0
+                || count_unescaped(&trimmed, '\'') % 2 != 0
             {
                 eprint!("> ");
                 let mut additional_input = String::new();
@@ -64,16 +57,24 @@ pub fn reading_input() -> String {
         Err(_) => "Command '<name>' not found".to_string(),
     }
 }
-
 pub fn tokenize(input: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut current = String::new();
     let mut chars = input.chars().peekable();
     let mut inside_single = false;
     let mut inside_double = false;
+    let mut escaped = false;
 
     while let Some(c) = chars.next() {
+        if escaped {
+            current.push(c);
+            escaped = false;
+            continue;
+        }
         match c {
+            '\\' => {
+                escaped = true;
+            }
             '"' if !inside_single => {
                 inside_double = !inside_double;
             }
@@ -94,4 +95,21 @@ pub fn tokenize(input: &str) -> Vec<String> {
         tokens.push(current);
     }
     tokens
+}
+
+fn count_unescaped(s: &str, ch: char) -> usize {
+    let mut count = 0;
+    let mut escaped = false;
+    for c in s.chars() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if c == '\\' {
+            escaped = true;
+        } else if c == ch {
+            count += 1;
+        }
+    }
+    count
 }
