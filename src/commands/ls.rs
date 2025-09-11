@@ -52,7 +52,7 @@ pub fn ls(args: &[String]) -> String {
             let mut name = target.to_string();
             if classify {
                 if let Ok(m) = fs::symlink_metadata(path) {
-                        name.push_str(&suffix_for(&m));
+                    name.push_str(&suffix_for(&m));
                 }
             }
             if long_format {
@@ -78,6 +78,7 @@ pub fn ls(args: &[String]) -> String {
                         dot.clone(),
                         fs::symlink_metadata(&dot).ok(),
                     ));
+
                     items.push((
                         "..".to_string(),
                         dotdot.clone(),
@@ -99,7 +100,7 @@ pub fn ls(args: &[String]) -> String {
                     // Sum 512-byte blocks, then convert to 1K blocks (like ls)
                     let total_blocks_512: u64 = items
                         .iter()
-                        .filter_map(|(_,_ , meta)| meta.as_ref())
+                        .filter_map(|(_, _, meta)| meta.as_ref())
                         .map(|m| m.blocks() as u64)
                         .sum();
                     // Convert to 1K blocks, rounding up if needed
@@ -108,7 +109,7 @@ pub fn ls(args: &[String]) -> String {
                 }
 
                 let mut short_names = Vec::new();
-                for (name, item_path,meta) in &items {
+                for (name, item_path, meta) in &items {
                     let mut display_name = name.clone();
                     if let Some(m) = meta.as_ref() {
                         if classify {
@@ -135,18 +136,18 @@ pub fn ls(args: &[String]) -> String {
                         // }
                         if long_format {
                             let formatted_name = format_name(&display_name);
-                            
-                        if !formatted_name.starts_with('\''){     
-                            output.push_str(&format!(
-                                "{}\n",
-                                long_format_line(item_path, m, &format!(" {}",formatted_name))
-                            ));
-                        } else {
+
+                            // if !formatted_name.starts_with('\''){
+                            //     output.push_str(&format!(
+                            //         "{}\n",
+                            //         long_format_line(item_path, m, &format!(" {}",formatted_name))
+                            //     ));
+                            // } else {
                             output.push_str(&format!(
                                 "{}\n",
                                 long_format_line(item_path, m, &formatted_name)
                             ));
-                        }
+                        // }
                         } else {
                             short_names.push(display_name);
                         }
@@ -167,15 +168,17 @@ pub fn ls(args: &[String]) -> String {
                     };
                     for (i, name) in short_names.iter().enumerate() {
                         let formatted_name = format_name(name);
-                        
-                        if !formatted_name.starts_with('\'') && short_names.iter().any(|n| format_name(n).starts_with('\'')) {
+
+                        if !formatted_name.starts_with('\'')
+                            && short_names.iter().any(|n| format_name(n).starts_with('\''))
+                        {
                         }
                         output.push_str(&formatted_name);
-                        
+
                         let is_last = i == short_names.len() - 1;
                         if (i + 1) % cols == 0 || is_last {
                             output.push('\n');
-                        } 
+                        }
                     }
                 }
             }
@@ -190,44 +193,35 @@ pub fn ls(args: &[String]) -> String {
 
     output
 }
-
-// Custom sort: '.' and '..' first, then case-insensitive lexicographical order, symbols before letters
 fn ls_cmp(a: &str, b: &str) -> std::cmp::Ordering {
-    // Special entries
-    if a == "." && b != "." {
-        return std::cmp::Ordering::Less;
+    match (a, b) {
+        (".", ".") => std::cmp::Ordering::Equal,
+        (".", _) => std::cmp::Ordering::Less,
+        (_, ".") => std::cmp::Ordering::Greater,
+        ("..", "..") => std::cmp::Ordering::Equal,
+        ("..", _) => std::cmp::Ordering::Less,
+        (_, "..") => std::cmp::Ordering::Greater,
+        _ => a.to_lowercase().cmp(&b.to_lowercase()),
     }
-    if b == "." && a != "." {
-        return std::cmp::Ordering::Greater;
-    }
-    if a == ".." && b != ".." {
-        return std::cmp::Ordering::Less;
-    }
-    if b == ".." && a != ".." {
-        return std::cmp::Ordering::Greater;
-    }
-    // Case-insensitive comparison
-    let a_lower = a.to_lowercase();
-    let b_lower = b.to_lowercase();
-    match a_lower.cmp(&b_lower) {
-        std::cmp::Ordering::Equal => a.cmp(b), // Lowercase before uppercase if equal ignoring case
-        ord => ord,
+}
+
+fn file_type_char(metadata: &std::fs::Metadata) -> char {
+    let mode = metadata.mode();
+    match mode & 0o170000 {
+        0o040000 => 'd', // directory
+        0o100000 => '-', // regular file
+        0o120000 => 'l', // symlink
+        0o010000 => 'p', // FIFO / pipe
+        0o060000 => 'b', // block device
+        0o020000 => 'c', // char device
+        0o140000 => 's', // socket
+        _ => '?',        // unknown
     }
 }
 
 fn long_format_line(path: &Path, metadata: &fs::Metadata, name: &str) -> String {
-    let file_type = {
-        let ft = metadata.file_type();
-        if ft.is_dir() {
-            'd'
-        } else if ft.is_symlink() {
-            'l'
-        } else if ft.is_file() {
-            '-'
-        } else {
-            '?'
-        }
-    };
+    let file_type = file_type_char(metadata);
+
     let perms = permissions_string(metadata);
     let nlink = metadata.nlink();
     let uid = metadata.uid();
@@ -238,8 +232,16 @@ fn long_format_line(path: &Path, metadata: &fs::Metadata, name: &str) -> String 
     let group = get_group_by_gid(gid)
         .map(|g| g.name().to_string_lossy().to_string())
         .unwrap_or(gid.to_string());
-    let size = metadata.len();
     let mtime = metadata.mtime();
+    let size_or_dev = match file_type {
+        'c' | 'b' => {
+            let rdev = metadata.rdev();
+            let major = (rdev >> 8) & 0xff;
+            let minor = rdev & 0xff;
+            format!("{},{}", major, minor)
+        }
+        _ => metadata.len().to_string(),
+    };
     // Convert mtime to local time using chrono::Local
     let datetime = chrono::Local.timestamp(mtime, 0);
     let now = chrono::Local::now();
@@ -267,7 +269,7 @@ fn long_format_line(path: &Path, metadata: &fs::Metadata, name: &str) -> String 
     }
     format!(
         "{}{} {:>2} {:<8} {:<8} {:>8} {} {}",
-        file_type, perms, nlink, user, group, size, date_str, display_name
+        file_type, perms, nlink, user, group, size_or_dev, date_str, display_name
     )
 }
 
