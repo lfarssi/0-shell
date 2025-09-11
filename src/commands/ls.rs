@@ -149,7 +149,7 @@ pub fn ls(args: &[String]) -> String {
                             ));
                         // }
                         } else {
-                            short_names.push(display_name);
+                            short_names.push(display_name+"\t");
                         }
                     } else if long_format {
                         output.push_str(&format!("?????????? {} {}\n", 0, name));
@@ -169,10 +169,7 @@ pub fn ls(args: &[String]) -> String {
                     for (i, name) in short_names.iter().enumerate() {
                         let formatted_name = format_name(name);
 
-                        if !formatted_name.starts_with('\'')
-                            && short_names.iter().any(|n| format_name(n).starts_with('\''))
-                        {
-                        }
+                       
                         output.push_str(&formatted_name);
 
                         let is_last = i == short_names.len() - 1;
@@ -238,7 +235,7 @@ fn long_format_line(path: &Path, metadata: &fs::Metadata, name: &str) -> String 
             let rdev = metadata.rdev();
             let major = (rdev >> 8) & 0xff;
             let minor = rdev & 0xff;
-            format!("{},{}", major, minor)
+            format!("{},          {}", major, minor)
         }
         _ => metadata.len().to_string(),
     };
