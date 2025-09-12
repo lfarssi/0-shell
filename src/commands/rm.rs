@@ -10,7 +10,7 @@ pub fn rm(args: &[String]) -> String {
     let mut files = Vec::new();
 
     for arg in args {
-        if arg == "-r" || arg == "-R" {
+        if arg == "-r" {
             recursive = true;
         } else {
             files.push(arg);

@@ -4,7 +4,7 @@ use std::fs;
 
 
 pub fn cp(args: &[String]) -> String {
-   if args.len() < 2 {
+    if args.len() < 2 {
         return "cp: missing file operand".to_string();
     }
 

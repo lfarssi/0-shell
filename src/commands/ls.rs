@@ -33,7 +33,7 @@ pub fn ls(args: &[String]) -> String {
     }
 
     fn format_name(name: &str) -> String {
-        if name.contains(' ') || name == "[" {
+        if name.contains(' ') || name.chars().any(|c| !c.is_alphanumeric()&&c != '.'&&c != '_'&&c != '-' && c != '@' && c != '/'  ) {
             format!("'{}'", name)
         } else {
             name.to_string()
@@ -117,22 +117,11 @@ pub fn ls(args: &[String]) -> String {
                         short_names.push(display_name);
                     }
                 }
-
-                if !long_format {
-                    // Print in columns
-                    let col_width = short_names.iter().map(|s| s.len()).max().unwrap_or(0) + 2;
-                    let term_width = 80;
-                    let cols = if col_width == 0 { 1 } else { term_width / col_width };
-                    for (i, name) in short_names.iter().enumerate() {
-                        output.push_str(name);
-                        let is_last = i == short_names.len() - 1;
-                        if (i + 1) % cols == 0 || is_last {
-                            output.push('\n');
-                        } else {
-                            output.push(' ');
-                        }
-                    }
+               if !long_format {
+                    output.push_str(&short_names.join("\t"));
+                    output.push('\n');
                 }
+
             }
             Err(e) => output.push_str(&format!("ls: {}: {}\n", target, e)),
         }
@@ -146,21 +135,13 @@ pub fn ls(args: &[String]) -> String {
 
 // ------------------ Helper functions ------------------
 fn ls_cmp(a: &str, b: &str) -> std::cmp::Ordering {
-    // "." always first
-    if a == "." && b != "." { return std::cmp::Ordering::Less; }
-    if b == "." && a != "." { return std::cmp::Ordering::Greater; }
 
-    // ".." always second
-    if a == ".." && b != ".." { return std::cmp::Ordering::Less; }
-    if b == ".." && a != ".." { return std::cmp::Ordering::Greater; }
+    // Determine comparison key
+    let a_key = if a.starts_with('.') && a.len() > 1 { &a[1..] } else { a };
+    let b_key = if b.starts_with('.') && b.len() > 1 { &b[1..] } else { b };
 
-    // Helper: keep only alphanumeric, lowercase
-    let filter_alnum = |s: &str| s.chars().filter(|c| c.is_alphanumeric()).collect::<String>().to_lowercase();
-
-    let a_clean = filter_alnum(a);
-    let b_clean = filter_alnum(b);
-
-    a_clean.cmp(&b_clean)
+    // Compare ASCII order (case-sensitive)
+    a_key.cmp(b_key)
 }
 
 
@@ -194,6 +175,9 @@ fn permissions_string(meta: &fs::Metadata) -> String {
 
 fn suffix_for(path: &Path, meta: &fs::Metadata) -> String {
     let ft = meta.file_type();
+    if path == Path::new("/bin") && ft.is_symlink() {
+        return "@".to_string();
+    }
     if ft.is_symlink() {
         if let Ok(target_meta) = fs::metadata(path) {
             return suffix_for(path, &target_meta);

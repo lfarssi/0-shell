@@ -3,7 +3,7 @@ use std::io::{self, BufRead, Write};
 
 pub fn cat(args: &[String]) -> String {
     // Function to read stdin interactively
-    fn interactive_stdin() {
+    fn open_buffer() {
         let stdin = io::stdin();
         let stdout = io::stdout();
         let mut handle_out = stdout.lock();
@@ -24,13 +24,13 @@ pub fn cat(args: &[String]) -> String {
 
     // If no arguments → read from stdin interactively
     if args.is_empty() {
-        interactive_stdin();
+        open_buffer();
         return String::new(); // Return empty string
     }
 
-    for (index, filename) in args.iter().enumerate() {
+    for (_, filename) in args.iter().enumerate() {
         if filename == "-" {
-            interactive_stdin();
+            open_buffer();
         } else {
             match fs::read_to_string(filename) {
                 Ok(content) => print!("{}", content),
