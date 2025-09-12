@@ -24,31 +24,13 @@ pub fn rm(args: &[String]) -> String {
     let mut messages = Vec::new();
 
     for file in files {
-
-
-        // Prevent removing special directories
-        if file == "." || file == ".." || file == "/" || file == "./" || file == "../" ||file == "~" {
+        // ✅ refuse to remove dangerous paths like ".", "..", "/", "./", "../", ".///"
+        if is_dangerous_path(file) {
             messages.push(format!("rm: refusing to remove '{}'", file));
             continue;
         }
 
         let path = Path::new(file);
-
-        // Check if current working directory is inside or is the directory to be deleted
-        if path.is_dir() {
-            // if let Ok(current_dir) = std::env::current_dir() {
-            //     if let (Ok(target), Ok(cwd)) = (path.canonicalize(), current_dir.canonicalize()) {
-            //         if cwd == target || cwd.starts_with(&target) {
-            //             messages.push(format!(
-            //                 "rm: refusing to remove '{}': Directory is current working directory or its ancestor",
-            //                 file
-            //             ));
-            //             continue;
-            //         }
-            //     }
-            // }
-        }
-
 
         if !path.exists() {
             messages.push(format!(
@@ -82,4 +64,20 @@ pub fn rm(args: &[String]) -> String {
     } else {
         messages.join("\n")
     }
+}
+
+fn is_dangerous_path(path: &str) -> bool {
+    let trimmed = path.trim_end_matches('/');
+
+    // "/" or "///"
+    if trimmed.is_empty() {
+        return true;
+    }
+
+    // "." or ".." or any variation like "./", "../", ".///..//"
+    if trimmed.chars().all(|c| c == '.' || c == '/') {
+        return true;
+    }
+
+    false
 }

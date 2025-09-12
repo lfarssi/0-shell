@@ -1,39 +1,43 @@
 use std::fs;
-use std::io::{self, Read};
+use std::io::{self, BufRead, Write};
 
 pub fn cat(args: &[String]) -> String {
-    let mut output = String::new();
+    // Function to read stdin interactively
+    fn interactive_stdin() {
+        let stdin = io::stdin();
+        let stdout = io::stdout();
+        let mut handle_out = stdout.lock();
 
-    // If no arguments → read from stdin
-    if args.is_empty() {
-        let mut buffer = String::new();
-        match io::stdin().read_to_string(&mut buffer) {
-            Ok(_) => output.push_str(&buffer),
-            Err(e) => output.push_str(&format!("cat: stdin: {}", e)),
+        for line in stdin.lock().lines() {
+            match line {
+                Ok(l) => {
+                    // Print immediately
+                    writeln!(handle_out, "{}", l).unwrap();
+                }
+                Err(e) => {
+                    writeln!(handle_out, "cat: stdin: {}", e).unwrap();
+                    break;
+                }
+            }
         }
-        return output;
+    }
+
+    // If no arguments → read from stdin interactively
+    if args.is_empty() {
+        interactive_stdin();
+        return String::new(); // Return empty string
     }
 
     for (index, filename) in args.iter().enumerate() {
         if filename == "-" {
-            // Handle stdin when "-" is passed
-            let mut buffer = String::new();
-            match io::stdin().read_to_string(&mut buffer) {
-                Ok(_) => output.push_str(&buffer),
-                Err(e) => output.push_str(&format!("cat: stdin: {}", e)),
-            }
+            interactive_stdin();
         } else {
-            // Normal file reading
             match fs::read_to_string(filename) {
-                Ok(content) => output.push_str(&content),
-                Err(e) => output.push_str(&format!("cat: {}: {}", filename, e)),
+                Ok(content) => print!("{}", content),
+                Err(e) => eprintln!("cat: {}: {}", filename, e),
             }
-        }
-
-        if index < args.len() - 1 {
-            output.push('\n');
         }
     }
 
-    output
+    String::new()
 }
