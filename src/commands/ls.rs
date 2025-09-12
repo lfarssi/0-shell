@@ -52,7 +52,7 @@ pub fn ls(args: &[String]) -> String {
             let mut name = target.to_string();
             if classify {
                 if let Ok(m) = fs::symlink_metadata(path) {
-                    name.push_str(&suffix_for(&m));
+                    name.push_str(&suffix_for(path,&m));
                 }
             }
             if long_format {
@@ -113,41 +113,17 @@ pub fn ls(args: &[String]) -> String {
                     let mut display_name = name.clone();
                     if let Some(m) = meta.as_ref() {
                         if classify {
-                            // For symlinks: if executable, use *, else @
-                            if m.file_type().is_symlink() && !long_format {
-                                if let Ok(target_meta) = std::fs::metadata(Path::new(&name)) {
-                                    if target_meta.permissions().mode() & 0o111 != 0 {
-                                        display_name.push('*');
-                                    } else {
-                                        display_name.push('@');
-                                    }
-                                } else {
-                                    display_name.push('@');
-                                }
-                            } else {
-                                display_name.push_str(&suffix_for(m));
-                            }
+                            display_name.push_str(&suffix_for(item_path,m));
                         }
-                        // Add suffix for . and .. in long format with -F
-                        // if long_format && classify && (name == "." || name == "..") {
-                        //     if m.file_type().is_dir() {
-                        //        // display_name.push('/');
-                        //     }
-                        // }
+
                         if long_format {
                             let formatted_name = format_name(&display_name);
 
-                            // if !formatted_name.starts_with('\''){
-                            //     output.push_str(&format!(
-                            //         "{}\n",
-                            //         long_format_line(item_path, m, &format!(" {}",formatted_name))
-                            //     ));
-                            // } else {
                             output.push_str(&format!(
                                 "{}\n",
                                 long_format_line(item_path, m, &formatted_name)
                             ));
-                        // }
+                        
                         } else {
                             short_names.push(display_name+"\t");
                         }
@@ -218,7 +194,6 @@ fn file_type_char(metadata: &std::fs::Metadata) -> char {
 
 fn long_format_line(path: &Path, metadata: &fs::Metadata, name: &str) -> String {
     let file_type = file_type_char(metadata);
-
     let perms = permissions_string(metadata);
     let nlink = metadata.nlink();
     let uid = metadata.uid();
@@ -229,55 +204,62 @@ fn long_format_line(path: &Path, metadata: &fs::Metadata, name: &str) -> String 
     let group = get_group_by_gid(gid)
         .map(|g| g.name().to_string_lossy().to_string())
         .unwrap_or(gid.to_string());
+
     let mtime = metadata.mtime();
-    let size_or_dev = match file_type {
-        'c' | 'b' => {
-            let rdev = metadata.rdev();
-            let major = (rdev >> 8) & 0xff;
-            let minor = rdev & 0xff;
-            format!("{},          {}", major, minor)
-        }
-        _ => metadata.len().to_string(),
-    };
-    // Convert mtime to local time using chrono::Local
     let datetime = chrono::Local.timestamp(mtime, 0);
     let now = chrono::Local::now();
-    // ls shows year if not this year, else HH:MM
     let date_str = if datetime.year() == now.year() {
         datetime.format("%b %e %H:%M").to_string()
     } else {
         datetime.format("%b %e  %Y").to_string()
     };
 
-    // For symlinks, append -> target (with suffix if needed)
+    let size_or_dev = match file_type {
+        'c' | 'b' => {
+            let rdev = metadata.rdev();
+            let major = (rdev >> 8) & 0xff;
+            let minor = rdev & 0xff;
+            format!("{:>3}, {:>3}", major, minor)
+        }
+        _ => format!("{:>8}", metadata.len()),
+    };
+
     let mut display_name = name.to_string();
     if metadata.file_type().is_symlink() {
         if let Ok(target_path) = std::fs::read_link(path) {
             let target_str = target_path.to_string_lossy();
-            // Try to get metadata for the target to determine suffix
-            let mut target_display = target_str.to_string();
-            if let Ok(target_meta) = std::fs::metadata(&target_path) {
-                target_display.push_str(&suffix_for(&target_meta));
-            }
-            display_name.push_str(&format!(" -> {}", target_display));
-        } else {
-            println!("Could not read symlink target for {}", name);
+            display_name.push_str(&format!(" -> {}", target_str));
         }
     }
+    display_name.push_str(&suffix_for(path,metadata)); // ✅ ensure suffix always visible
+
     format!(
-        "{}{} {:>2} {:<8} {:<8} {:>8} {} {}",
+        "{}{} {:>2} {:<8} {:<8} {} {} {}",
         file_type, perms, nlink, user, group, size_or_dev, date_str, display_name
     )
 }
-
-fn suffix_for(m: &fs::Metadata) -> String {
+fn suffix_for(path: &Path, m: &fs::Metadata) -> String {
+    let mode = m.mode();
     let ft = m.file_type();
+
+    if ft.is_symlink() {
+        if let Ok(target_meta) = fs::metadata(path) {
+            return suffix_for(&path, &target_meta); // recurse on the target
+        } else {
+            return "@".to_string(); // broken link
+        }
+    }
+
     if ft.is_dir() {
         "/".to_string()
-    } else if ft.is_file() && (m.permissions().mode() & 0o111 != 0) {
+    } else if ft.is_file() && (mode & 0o111 != 0) {
         "*".to_string()
     } else {
-        "".to_string()
+        match mode & 0o170000 {
+            0o010000 => "|".to_string(), // FIFO
+            0o140000 => "=".to_string(), // Socket
+            _ => "".to_string(),
+        }
     }
 }
 
