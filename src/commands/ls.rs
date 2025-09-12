@@ -1,7 +1,6 @@
 use chrono::{Datelike, TimeZone};
 use std::fs;
-use std::os::unix::fs::MetadataExt;
-use std::os::unix::fs::PermissionsExt;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use users::{get_group_by_gid, get_user_by_uid};
 
@@ -13,6 +12,7 @@ pub fn ls(args: &[String]) -> String {
 
     let mut targets: Vec<&str> = Vec::new();
 
+    // Parse arguments
     for arg in args {
         if arg.starts_with('-') {
             for ch in arg.chars().skip(1) {
@@ -20,15 +20,14 @@ pub fn ls(args: &[String]) -> String {
                     'a' => show_all = true,
                     'l' => long_format = true,
                     'F' => classify = true,
-                    _ => {
-                        output.push_str(&format!("ls: invalid option -- '{}'\n", ch));
-                    }
+                    _ => output.push_str(&format!("ls: invalid option -- '{}'\n", ch)),
                 }
             }
         } else {
             targets.push(arg.as_str());
         }
     }
+
     if targets.is_empty() {
         targets.push(".");
     }
@@ -41,172 +40,190 @@ pub fn ls(args: &[String]) -> String {
         }
     }
 
-    for (_, target) in targets.iter().enumerate() {
+    for target in targets.iter() {
         let path = Path::new(target);
 
         if targets.len() > 1 {
             output.push_str(&format!("{}:\n", format_name(target)));
         }
 
-        if path.is_file() {
-            let mut name = target.to_string();
-            if classify {
-                if let Ok(m) = fs::symlink_metadata(path) {
-                    name.push_str(&suffix_for(path,&m));
-                }
-            }
-            if long_format {
-                if let Ok(m) = fs::symlink_metadata(path) {
-                    output.push_str(&format!("{}\n", long_format_line(path, &m, &name)));
+        // Handle single file or symlink
+        if path.is_file() || path.is_symlink() {
+            if let Ok(meta) = fs::symlink_metadata(path) {
+                let display_name = if classify {
+                    format!("{}{}", target, suffix_for(path, &meta))
                 } else {
-                    output.push_str(&format!("{}\n", name));
+                    target.to_string()
+                };
+                let display_name = format_name(&display_name); // wrap in quotes if contains space
+                if long_format {
+
+                    output.push_str(&format!("{}\n", long_format_line(path, &meta, &display_name)));
+                } else {
+                    output.push_str(&format!("{}\n", display_name));
                 }
             } else {
-                output.push_str(&format!("{}\n", name));
+                output.push_str(&format!("{}\n", format_name(target)));
             }
             continue;
         }
 
+        // Handle directory
         match fs::read_dir(path) {
             Ok(entries) => {
-                let mut items: Vec<(String, std::path::PathBuf, Option<fs::Metadata>)> = Vec::new();
-                if show_all {
-                    let dot = path.join(".");
-                    let dotdot = path.join("..");
-                    items.push((
-                        ".".to_string(),
-                        dot.clone(),
-                        fs::symlink_metadata(&dot).ok(),
-                    ));
+                let mut items: Vec<(String, std::path::PathBuf, fs::Metadata)> = Vec::new();
 
-                    items.push((
-                        "..".to_string(),
-                        dotdot.clone(),
-                        fs::symlink_metadata(&dotdot).ok(),
-                    ));
+                if show_all {
+                    for name in &[".", ".."] {
+                        let p = path.join(name);
+                        if let Ok(meta) = fs::symlink_metadata(&p) {
+                            items.push((name.to_string(), p, meta));
+                        }
+                    }
                 }
+
                 for entry in entries.flatten() {
                     let name = entry.file_name().to_string_lossy().to_string();
                     if !show_all && name.starts_with('.') {
                         continue;
                     }
                     let item_path = entry.path();
-                    let meta = fs::symlink_metadata(&item_path).ok();
-                    items.push((name, item_path, meta));
+                    if let Ok(meta) = fs::symlink_metadata(&item_path) {
+                        items.push((name, item_path, meta));
+                    }
                 }
+
                 items.sort_by(|a, b| ls_cmp(&a.0, &b.0));
-                // Calculate total blocks for long format
+
+                // Long format total blocks
                 if long_format {
-                    // Sum 512-byte blocks, then convert to 1K blocks (like ls)
-                    let total_blocks_512: u64 = items
-                        .iter()
-                        .filter_map(|(_, _, meta)| meta.as_ref())
-                        .map(|m| m.blocks() as u64)
-                        .sum();
-                    // Convert to 1K blocks, rounding up if needed
-                    let total_blocks_1k = (total_blocks_512 + 1) / 2;
-                    output.push_str(&format!("total {}\n", total_blocks_1k));
+                    let total_blocks: u64 = items.iter().map(|(_, _, m)| m.blocks() as u64).sum();
+                    output.push_str(&format!("total {}\n", (total_blocks + 1) / 2));
                 }
 
                 let mut short_names = Vec::new();
-                for (name, item_path, meta) in &items {
-                    let mut display_name = name.clone();
-                    if let Some(m) = meta.as_ref() {
-                        if classify {
-                            display_name.push_str(&suffix_for(item_path,m));
-                        }
 
-                        if long_format {
-                            let formatted_name = format_name(&display_name);
+                for (name, path, meta) in items {
+                    let mut display_name = if classify && !long_format {
+                        format!("{}{}", name, suffix_for(&path, &meta))
+                    } else {
+                        name.clone()
+                    };
+                    display_name = format_name(&display_name); // wrap in quotes if contains space
 
-                            output.push_str(&format!(
-                                "{}\n",
-                                long_format_line(item_path, m, &formatted_name)
-                            ));
-                        
-                        } else {
-                            short_names.push(display_name+"\t");
-                        }
-                    } else if long_format {
-                        output.push_str(&format!("?????????? {} {}\n", 0, name));
+                    if long_format {
+                        output.push_str(&format!("{}\n", long_format_line(&path, &meta, &display_name)));
                     } else {
                         short_names.push(display_name);
                     }
                 }
-                // Print short format in columns (simple, space-separated)
+
                 if !long_format {
+                    // Print in columns
                     let col_width = short_names.iter().map(|s| s.len()).max().unwrap_or(0) + 2;
-                    let term_width = 80; // fallback if can't get terminal width
-                    let cols = if col_width == 0 {
-                        1
-                    } else {
-                        term_width / col_width
-                    };
+                    let term_width = 80;
+                    let cols = if col_width == 0 { 1 } else { term_width / col_width };
                     for (i, name) in short_names.iter().enumerate() {
-                        let formatted_name = format_name(name);
-
-                       
-                        output.push_str(&formatted_name);
-
+                        output.push_str(name);
                         let is_last = i == short_names.len() - 1;
                         if (i + 1) % cols == 0 || is_last {
                             output.push('\n');
+                        } else {
+                            output.push(' ');
                         }
                     }
                 }
             }
-            Err(e) => {
-                output.push_str(&format!("ls: {}: {}\n", target, e));
-            }
+            Err(e) => output.push_str(&format!("ls: {}: {}\n", target, e)),
         }
     }
+
     if output.ends_with('\n') {
         output.pop();
     }
-
     output
 }
+
+// ------------------ Helper functions ------------------
 fn ls_cmp(a: &str, b: &str) -> std::cmp::Ordering {
-    match (a, b) {
-        (".", ".") => std::cmp::Ordering::Equal,
-        (".", _) => std::cmp::Ordering::Less,
-        (_, ".") => std::cmp::Ordering::Greater,
-        ("..", "..") => std::cmp::Ordering::Equal,
-        ("..", _) => std::cmp::Ordering::Less,
-        (_, "..") => std::cmp::Ordering::Greater,
-        _ => a.to_lowercase().cmp(&b.to_lowercase()),
+    // "." always first
+    if a == "." && b != "." { return std::cmp::Ordering::Less; }
+    if b == "." && a != "." { return std::cmp::Ordering::Greater; }
+
+    // ".." always second
+    if a == ".." && b != ".." { return std::cmp::Ordering::Less; }
+    if b == ".." && a != ".." { return std::cmp::Ordering::Greater; }
+
+    // Helper: keep only alphanumeric, lowercase
+    let filter_alnum = |s: &str| s.chars().filter(|c| c.is_alphanumeric()).collect::<String>().to_lowercase();
+
+    let a_clean = filter_alnum(a);
+    let b_clean = filter_alnum(b);
+
+    a_clean.cmp(&b_clean)
+}
+
+
+fn file_type_char(meta: &fs::Metadata) -> char {
+    match meta.mode() & 0o170000 {
+        0o040000 => 'd',
+        0o100000 => '-',
+        0o120000 => 'l',
+        0o010000 => 'p',
+        0o060000 => 'b',
+        0o020000 => 'c',
+        0o140000 => 's',
+        _ => '?',
     }
 }
 
-fn file_type_char(metadata: &std::fs::Metadata) -> char {
-    let mode = metadata.mode();
-    match mode & 0o170000 {
-        0o040000 => 'd', // directory
-        0o100000 => '-', // regular file
-        0o120000 => 'l', // symlink
-        0o010000 => 'p', // FIFO / pipe
-        0o060000 => 'b', // block device
-        0o020000 => 'c', // char device
-        0o140000 => 's', // socket
-        _ => '?',        // unknown
+fn permissions_string(meta: &fs::Metadata) -> String {
+    let mode = meta.permissions().mode();
+    let mut s = String::new();
+    let bits = [
+        0o400, 0o200, 0o100, // owner
+        0o040, 0o020, 0o010, // group
+        0o004, 0o002, 0o001, // others
+    ];
+    let chars = ['r', 'w', 'x'];
+    for i in 0..9 {
+        s.push(if mode & bits[i] != 0 { chars[i % 3] } else { '-' });
+    }
+    s
+}
+
+fn suffix_for(path: &Path, meta: &fs::Metadata) -> String {
+    let ft = meta.file_type();
+    if ft.is_symlink() {
+        if let Ok(target_meta) = fs::metadata(path) {
+            return suffix_for(path, &target_meta);
+        } else {
+            return "@".to_string();
+        }
+    }
+    if ft.is_dir() {
+        "/".to_string()
+    } else if ft.is_file() && (meta.mode() & 0o111 != 0) {
+        "*".to_string()
+    } else {
+        match meta.mode() & 0o170000 {
+            0o010000 => "|".to_string(),
+            0o140000 => "=".to_string(),
+            _ => "".to_string(),
+        }
     }
 }
 
-fn long_format_line(path: &Path, metadata: &fs::Metadata, name: &str) -> String {
-    let file_type = file_type_char(metadata);
-    let perms = permissions_string(metadata);
-    let nlink = metadata.nlink();
-    let uid = metadata.uid();
-    let gid = metadata.gid();
-    let user = get_user_by_uid(uid)
-        .map(|u| u.name().to_string_lossy().to_string())
-        .unwrap_or(uid.to_string());
-    let group = get_group_by_gid(gid)
-        .map(|g| g.name().to_string_lossy().to_string())
-        .unwrap_or(gid.to_string());
+fn long_format_line(path: &Path, meta: &fs::Metadata, name: &str) -> String {
+    let file_type = file_type_char(meta);
+    let perms = permissions_string(meta);
+    let nlink = meta.nlink();
+    let uid = meta.uid();
+    let gid = meta.gid();
+    let user = get_user_by_uid(uid).map(|u| u.name().to_string_lossy().to_string()).unwrap_or(uid.to_string());
+    let group = get_group_by_gid(gid).map(|g| g.name().to_string_lossy().to_string()).unwrap_or(gid.to_string());
 
-    let mtime = metadata.mtime();
-    let datetime = chrono::Local.timestamp(mtime, 0);
+    let datetime = chrono::Local.timestamp_opt(meta.mtime(), 0).single().unwrap();
     let now = chrono::Local::now();
     let date_str = if datetime.year() == now.year() {
         datetime.format("%b %e %H:%M").to_string()
@@ -216,71 +233,19 @@ fn long_format_line(path: &Path, metadata: &fs::Metadata, name: &str) -> String 
 
     let size_or_dev = match file_type {
         'c' | 'b' => {
-            let rdev = metadata.rdev();
-            let major = (rdev >> 8) & 0xff;
-            let minor = rdev & 0xff;
-            format!("{:>3}, {:>3}", major, minor)
-        }
-        _ => format!("{:>8}", metadata.len()),
+            let rdev = meta.rdev();
+            format!("{:>3}, {:>3}", (rdev >> 8) & 0xff, rdev & 0xff)
+        },
+        _ => format!("{:>8}", meta.len()),
     };
 
     let mut display_name = name.to_string();
-    if metadata.file_type().is_symlink() {
-        if let Ok(target_path) = std::fs::read_link(path) {
-            let target_str = target_path.to_string_lossy();
-            display_name.push_str(&format!(" -> {}", target_str));
+    if meta.file_type().is_symlink() {
+        if let Ok(target_path) = fs::read_link(path) {
+            display_name.push_str(&format!(" -> {}", target_path.to_string_lossy()));
         }
     }
-    display_name.push_str(&suffix_for(path,metadata)); // ✅ ensure suffix always visible
+    display_name.push_str(&suffix_for(path, meta));
 
-    format!(
-        "{}{} {:>2} {:<8} {:<8} {} {} {}",
-        file_type, perms, nlink, user, group, size_or_dev, date_str, display_name
-    )
-}
-fn suffix_for(path: &Path, m: &fs::Metadata) -> String {
-    let mode = m.mode();
-    let ft = m.file_type();
-
-    if ft.is_symlink() {
-        if let Ok(target_meta) = fs::metadata(path) {
-            return suffix_for(&path, &target_meta); // recurse on the target
-        } else {
-            return "@".to_string(); // broken link
-        }
-    }
-
-    if ft.is_dir() {
-        "/".to_string()
-    } else if ft.is_file() && (mode & 0o111 != 0) {
-        "*".to_string()
-    } else {
-        match mode & 0o170000 {
-            0o010000 => "|".to_string(), // FIFO
-            0o140000 => "=".to_string(), // Socket
-            _ => "".to_string(),
-        }
-    }
-}
-
-fn permissions_string(metadata: &fs::Metadata) -> String {
-    let mode = metadata.permissions().mode();
-    let mut perms = String::new();
-
-    // Owner
-    perms.push(if mode & 0o400 != 0 { 'r' } else { '-' });
-    perms.push(if mode & 0o200 != 0 { 'w' } else { '-' });
-    perms.push(if mode & 0o100 != 0 { 'x' } else { '-' });
-
-    // Group
-    perms.push(if mode & 0o040 != 0 { 'r' } else { '-' });
-    perms.push(if mode & 0o020 != 0 { 'w' } else { '-' });
-    perms.push(if mode & 0o010 != 0 { 'x' } else { '-' });
-
-    // Others
-    perms.push(if mode & 0o004 != 0 { 'r' } else { '-' });
-    perms.push(if mode & 0o002 != 0 { 'w' } else { '-' });
-    perms.push(if mode & 0o001 != 0 { 'x' } else { '-' });
-
-    perms
+    format!("{}{} {:>2} {:<8} {:<8} {} {} {}", file_type, perms, nlink, user, group, size_or_dev, date_str, display_name)
 }
