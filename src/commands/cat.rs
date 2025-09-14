@@ -33,7 +33,7 @@ pub fn cat(args: &[String]) -> String {
             open_buffer();
         } else {
             match fs::read_to_string(filename) {
-                Ok(content) => print!("{}", content),
+                Ok(content) => print!("{}\n", content),
                 Err(e) => eprintln!("cat: {}: {}", filename, e),
             }
         }
