@@ -1,47 +1,57 @@
 use crate::{commands::handle_commands::handle_command, parsing::valide::validate_input};
 use std::io;
 
-pub fn reading_input() -> String {
+pub fn reading_input() -> Option<String> {
     let mut input = String::new();
     eprint!("$ ");
-    let _ = io::stdin().read_line(&mut input);
+
+    match io::stdin().read_line(&mut input) {
+        Ok(0) => return None, // Ctrl+D pressed → signal EOF
+        Ok(_) => {}
+        Err(_) => return None, // handle read error like EOF
+    }
 
     let mut trimmed = input.trim_end().to_string();
 
-    // Keep reading if quotes are not closed (only count unescaped quotes outside other quotes)
+    // Keep reading if quotes are not closed
     while !quotes_balanced(&trimmed) {
         eprint!("> ");
         let mut additional_input = String::new();
-        if io::stdin().read_line(&mut additional_input).is_err() {
-            return "Error reading input".to_string();
+        match io::stdin().read_line(&mut additional_input) {
+            Ok(0) => return None, // Ctrl+D mid-input → exit
+            Ok(_) => {}
+            Err(_) => return None,
         }
         trimmed.push('\n');
         trimmed.push_str(additional_input.trim_end());
     }
 
     while trimmed.ends_with('\\') {
-        trimmed.pop(); // remove trailing backslash
+        trimmed.pop();
         eprint!("> ");
         let mut additional_input = String::new();
-        if io::stdin().read_line(&mut additional_input).is_err() {
-            return "Error reading input".to_string();
+        match io::stdin().read_line(&mut additional_input) {
+            Ok(0) => return None,
+            Ok(_) => {}
+            Err(_) => return None,
         }
         trimmed.push_str(additional_input.trim_end());
     }
 
     let tokens = tokenize(&trimmed);
-
     if tokens.is_empty() {
-        return "".to_string();
+        return Some("".to_string());
     }
 
     let cmd = &tokens[0];
     let args = &tokens[1..];
 
-    match validate_input(cmd) {
+    let output = match validate_input(cmd) {
         Some(_) => handle_command(cmd, args),
         None => format!("Command '{}' not found", cmd),
-    }
+    };
+
+    Some(output)
 }
 
 /// Tokenize shell-like: single quotes preserve literally, double quotes allow escapes, spaces split outside quotes

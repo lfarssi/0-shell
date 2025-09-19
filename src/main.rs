@@ -3,15 +3,20 @@ extern crate users;
 mod parsing;
 mod commands;
 fn main() {
-   if !parsing::welcome::welcome().is_ok(){
-    return
-   }
-loop {
-        let result = parsing::input::reading_input();
-        
-        if result.trim().len()==0 {
-            continue;
+    if !parsing::welcome::welcome().is_ok() {
+        return;
+    }
+
+    loop {
+        match parsing::input::reading_input() {
+            Some(result) if !result.trim().is_empty() => {
+                println!("{}", result);
+            }
+            Some(_) => continue, // empty input → keep looping
+            None => {
+                println!(); // print newline like real shells on Ctrl+D
+                break; // exit loop
+            }
         }
-        println!("{}", result);
     }
 }
