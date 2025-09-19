@@ -67,17 +67,30 @@ pub fn rm(args: &[String]) -> String {
 }
 
 fn is_dangerous_path(path: &str) -> bool {
-    let trimmed = path.trim_end_matches('/');
+    let path = Path::new(path);
 
-    // "/" or "///"
-    if trimmed.is_empty() {
-        return true;
+    // Try to canonicalize the path
+    if let Ok(canonical) = path.canonicalize() {
+        // Refuse root
+        if canonical == Path::new("/") {
+            return true;
+        }
+
+        // Refuse current dir
+        if canonical == std::env::current_dir().unwrap() {
+            return true;
+        }
+
+        // Optionally, refuse if path escapes current working directory
+        let cwd = std::env::current_dir().unwrap();
+        if !canonical.starts_with(&cwd) {
+            return true;
+        }
+
+        // Otherwise, safe
+        false
+    } else {
+        // If canonicalization fails, treat as safe for now (or log warning)
+        false
     }
-
-    // "." or ".." or any variation like "./", "../", ".///..//"
-    if trimmed.chars().all(|c| c == '.' || c == '/') {
-        return true;
-    }
-
-    false
 }

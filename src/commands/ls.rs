@@ -2,7 +2,47 @@ use chrono::{Datelike, TimeZone};
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
-use users::{get_group_by_gid, get_user_by_uid};
+
+
+/// Look up username for a given UID by parsing /etc/passwd
+fn user_name(uid: u32) -> String {
+    if let Ok(content) = fs::read_to_string("/etc/passwd") {
+        for line in content.lines() {
+            if line.starts_with('#') || line.trim().is_empty() {
+                continue;
+            }
+            let parts: Vec<&str> = line.split(':').collect();
+            if parts.len() >= 3 {
+                if let Ok(id) = parts[2].parse::<u32>() {
+                    if id == uid {
+                        return parts[0].to_string(); // username
+                    }
+                }
+            }
+        }
+    }
+    uid.to_string() // fallback: show UID if not found
+}
+
+/// Look up group name for a given GID by parsing /etc/group
+fn group_name(gid: u32) -> String {
+    if let Ok(content) = fs::read_to_string("/etc/group") {
+        for line in content.lines() {
+            if line.starts_with('#') || line.trim().is_empty() {
+                continue;
+            }
+            let parts: Vec<&str> = line.split(':').collect();
+            if parts.len() >= 3 {
+                if let Ok(id) = parts[2].parse::<u32>() {
+                    if id == gid {
+                        return parts[0].to_string(); // group name
+                    }
+                }
+            }
+        }
+    }
+    gid.to_string() // fallback: show GID if not found
+}
 
 pub fn ls(args: &[String]) -> String {
     let mut output = String::new();
@@ -33,7 +73,7 @@ pub fn ls(args: &[String]) -> String {
     }
 
     fn format_name(name: &str) -> String {
-        if name.contains(' ') || name.chars().any(|c| !c.is_alphanumeric()&&c != '.'&&c != '_'&&c != '-' && c != '@' && c != '/'  ) {
+        if name.contains(' ') || name.chars().any(|c: char| !c.is_alphanumeric() && c != '.' && c != '_' && c != '-' && c != '@' && c != '/'  ) {
             format!("'{}'", name)
         } else {
             name.to_string()
@@ -55,9 +95,8 @@ pub fn ls(args: &[String]) -> String {
                 } else {
                     target.to_string()
                 };
-                let display_name = format_name(&display_name); // wrap in quotes if contains space
+                let display_name = format_name(&display_name);
                 if long_format {
-
                     output.push_str(&format!("{}\n", long_format_line(path, &meta, &display_name)));
                 } else {
                     output.push_str(&format!("{}\n", display_name));
@@ -95,7 +134,6 @@ pub fn ls(args: &[String]) -> String {
 
                 items.sort_by(|a, b| ls_cmp(&a.0, &b.0));
 
-                // Long format total blocks
                 if long_format {
                     let total_blocks: u64 = items.iter().map(|(_, _, m)| m.blocks() as u64).sum();
                     output.push_str(&format!("total {}\n", (total_blocks + 1) / 2));
@@ -109,7 +147,7 @@ pub fn ls(args: &[String]) -> String {
                     } else {
                         name.clone()
                     };
-                    display_name = format_name(&display_name); // wrap in quotes if contains space
+                    display_name = format_name(&display_name);
 
                     if long_format {
                         output.push_str(&format!("{}\n", long_format_line(&path, &meta, &display_name)));
@@ -117,7 +155,7 @@ pub fn ls(args: &[String]) -> String {
                         short_names.push(display_name);
                     }
                 }
-               if !long_format {
+                if !long_format {
                     output.push_str(&short_names.join("\t"));
                     output.push('\n');
                 }
@@ -135,15 +173,10 @@ pub fn ls(args: &[String]) -> String {
 
 // ------------------ Helper functions ------------------
 fn ls_cmp(a: &str, b: &str) -> std::cmp::Ordering {
-
-    // Determine comparison key
     let a_key = if a.starts_with('.') && a.len() > 1 { &a[1..] } else { a };
     let b_key = if b.starts_with('.') && b.len() > 1 { &b[1..] } else { b };
-
-    // Compare ASCII order (case-sensitive)
     a_key.cmp(b_key)
 }
-
 
 fn file_type_char(meta: &fs::Metadata) -> char {
     match meta.mode() & 0o170000 {
@@ -158,19 +191,33 @@ fn file_type_char(meta: &fs::Metadata) -> char {
     }
 }
 
-fn permissions_string(meta: &fs::Metadata) -> String {
+fn permissions_string(meta: &fs::Metadata, path: &Path) -> String {
     let mode = meta.permissions().mode();
     let mut s = String::new();
     let bits = [
-        0o400, 0o200, 0o100, // owner
-        0o040, 0o020, 0o010, // group
-        0o004, 0o002, 0o001, // others
+        0o400, 0o200, 0o100,
+        0o040, 0o020, 0o010,
+        0o004, 0o002, 0o001,
     ];
     let chars = ['r', 'w', 'x'];
     for i in 0..9 {
         s.push(if mode & bits[i] != 0 { chars[i % 3] } else { '-' });
     }
+
+    // Check if file has extended attributes (xattrs) → append "+"
+    if has_xattrs(path) {
+        s.push('+');
+    }
+
     s
+}
+
+/// Fake xattr detector using Linux user.* attributes
+fn has_xattrs(path: &Path) -> bool {
+    // This requires libc in reality (listxattr), here we fake it
+    // by checking if "security.selinux" exists in sysfs/proc (not portable!)
+    // For a pure std version, always return false.
+    false
 }
 
 fn suffix_for(path: &Path, meta: &fs::Metadata) -> String {
@@ -200,12 +247,12 @@ fn suffix_for(path: &Path, meta: &fs::Metadata) -> String {
 
 fn long_format_line(path: &Path, meta: &fs::Metadata, name: &str) -> String {
     let file_type = file_type_char(meta);
-    let perms = permissions_string(meta);
+    let perms = permissions_string(meta, path);
     let nlink = meta.nlink();
     let uid = meta.uid();
     let gid = meta.gid();
-    let user = get_user_by_uid(uid).map(|u| u.name().to_string_lossy().to_string()).unwrap_or(uid.to_string());
-    let group = get_group_by_gid(gid).map(|g| g.name().to_string_lossy().to_string()).unwrap_or(gid.to_string());
+    let user = user_name(uid);
+    let group = group_name(gid);
 
     let datetime = chrono::Local.timestamp_opt(meta.mtime(), 0).single().unwrap();
     let now = chrono::Local::now();
@@ -231,5 +278,8 @@ fn long_format_line(path: &Path, meta: &fs::Metadata, name: &str) -> String {
     }
     display_name.push_str(&suffix_for(path, meta));
 
-    format!("{}{} {:>2} {:<8} {:<8} {} {} {}", file_type, perms, nlink, user, group, size_or_dev, date_str, display_name)
+    format!(
+        "{}{} {:>2} {:<8} {:<8} {} {} {}",
+        file_type, perms, nlink, user, group, size_or_dev, date_str, display_name
+    )
 }
