@@ -2,6 +2,8 @@ use chrono::{Datelike, TimeZone};
 use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
+use std::cmp::Ordering;
+
 
 
 /// Look up username for a given UID by parsing /etc/passwd
@@ -172,11 +174,23 @@ pub fn ls(args: &[String]) -> String {
 }
 
 // ------------------ Helper functions ------------------
-fn ls_cmp(a: &str, b: &str) -> std::cmp::Ordering {
-    let a_key = if a.starts_with('.') && a.len() > 1 { &a[1..] } else { a };
-    let b_key = if b.starts_with('.') && b.len() > 1 { &b[1..] } else { b };
-    a_key.cmp(b_key)
+
+fn strip_dot(s: &str) -> &str {
+    if s.starts_with('.') && s.len() > 1 {
+        &s[1..]
+    } else {
+        s
+    }
 }
+
+fn ls_cmp(a: &str, b: &str) -> Ordering {
+    let a_key = strip_dot(a);
+    let b_key = strip_dot(b);
+
+    a_key.to_lowercase().as_bytes().cmp(b_key.to_lowercase().as_bytes())
+
+}
+
 
 fn file_type_char(meta: &fs::Metadata) -> char {
     match meta.mode() & 0o170000 {
