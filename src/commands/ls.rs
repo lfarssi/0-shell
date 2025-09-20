@@ -3,48 +3,50 @@ use std::fs;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::Path;
 use std::cmp::Ordering;
+use users::{get_group_by_gid, get_user_by_uid};
 
 
 
-/// Look up username for a given UID by parsing /etc/passwd
-fn user_name(uid: u32) -> String {
-    if let Ok(content) = fs::read_to_string("/etc/passwd") {
-        for line in content.lines() {
-            if line.starts_with('#') || line.trim().is_empty() {
-                continue;
-            }
-            let parts: Vec<&str> = line.split(':').collect();
-            if parts.len() >= 3 {
-                if let Ok(id) = parts[2].parse::<u32>() {
-                    if id == uid {
-                        return parts[0].to_string(); // username
-                    }
-                }
-            }
-        }
-    }
-    uid.to_string() // fallback: show UID if not found
-}
 
-/// Look up group name for a given GID by parsing /etc/group
-fn group_name(gid: u32) -> String {
-    if let Ok(content) = fs::read_to_string("/etc/group") {
-        for line in content.lines() {
-            if line.starts_with('#') || line.trim().is_empty() {
-                continue;
-            }
-            let parts: Vec<&str> = line.split(':').collect();
-            if parts.len() >= 3 {
-                if let Ok(id) = parts[2].parse::<u32>() {
-                    if id == gid {
-                        return parts[0].to_string(); // group name
-                    }
-                }
-            }
-        }
-    }
-    gid.to_string() // fallback: show GID if not found
-}
+// /// Look up username for a given UID by parsing /etc/passwd
+// fn user_name(uid: u32) -> String {
+//     if let Ok(content) = fs::read_to_string("/etc/passwd") {
+//         for line in content.lines() {
+//             if line.starts_with('#') || line.trim().is_empty() {
+//                 continue;
+//             }
+//             let parts: Vec<&str> = line.split(':').collect();
+//             if parts.len() >= 3 {
+//                 if let Ok(id) = parts[2].parse::<u32>() {
+//                     if id == uid {
+//                         return parts[0].to_string(); // username
+//                     }
+//                 }
+//             }
+//         }
+//     }
+//     uid.to_string() // fallback: show UID if not found
+// }
+
+// /// Look up group name for a given GID by parsing /etc/group
+// fn group_name(gid: u32) -> String {
+//     if let Ok(content) = fs::read_to_string("/etc/group") {
+//         for line in content.lines() {
+//             if line.starts_with('#') || line.trim().is_empty() {
+//                 continue;
+//             }
+//             let parts: Vec<&str> = line.split(':').collect();
+//             if parts.len() >= 3 {
+//                 if let Ok(id) = parts[2].parse::<u32>() {
+//                     if id == gid {
+//                         return parts[0].to_string(); // group name
+//                     }
+//                 }
+//             }
+//         }
+//     }
+//     gid.to_string() // fallback: show GID if not found
+// }
 
 pub fn ls(args: &[String]) -> String {
     let mut output = String::new();
@@ -265,8 +267,8 @@ fn long_format_line(path: &Path, meta: &fs::Metadata, name: &str) -> String {
     let nlink = meta.nlink();
     let uid = meta.uid();
     let gid = meta.gid();
-    let user = user_name(uid);
-    let group = group_name(gid);
+    let user = get_user_by_uid(uid).map(|u| u.name().to_string_lossy().to_string()).unwrap_or(uid.to_string());
+    let group = get_group_by_gid(gid).map(|g| g.name().to_string_lossy().to_string()).unwrap_or(gid.to_string());
 
     let datetime = chrono::Local.timestamp_opt(meta.mtime(), 0).single().unwrap();
     let now = chrono::Local::now();
